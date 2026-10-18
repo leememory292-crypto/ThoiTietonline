@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cảnh báo thời tiết cực đoan Việt Nam — 18–21/10/2026</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:#0b1220;color:#e8eef7}
+  #map{position:fixed;top:0;left:0;right:0;bottom:0;z-index:1}
+  .topbar{position:fixed;top:10px;left:10px;z-index:1000;display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:calc(100vw - 60px)}
+  .apptitle{background:rgba(10,18,32,.9);padding:9px 13px;border-radius:999px;font-weight:700;font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,.45)}
+  .btn{cursor:pointer;border:1px solid #3b82f6;background:#1d4ed8;color:#fff;border-radius:999px;padding:9px 15px;font-size:14px;font-weight:600}
+  .btn.ghost{background:rgba(22,35,58,.92);border-color:#334155}
+  .btn:disabled{opacity:.55;cursor:default}
+  #blockedBanner{position:fixed;top:58px;left:10px;right:10px;z-index:1002;display:none;padding:12px;border-radius:10px;background:#431407;border:1px solid #ef4444;font-size:14px;line-height:1.5;box-shadow:0 4px 18px rgba(0,0,0,.5)}
+  .tourbar{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:1000;display:flex;gap:10px;align-items:center;background:rgba(10,18,32,.92);padding:8px 12px;border-radius:999px;box-shadow:0 4px 18px rgba(0,0,0,.55)}
+  .tbtn{width:48px;height:48px;padding:0;font-size:18px;display:flex;align-items:center;justify-content:center;border-radius:50%}
+  .tbtn.big{width:62px;height:62px;font-size:26px;background:#f97316;border-color:#f97316}
+  #tourPos{font-size:14px;font-weight:700;min-width:78px;text-align:center}
+  .drawer{position:fixed;top:0;right:0;bottom:0;width:370px;max-width:90vw;z-index:1001;background:#101a2e;border-left:1px solid #24334f;transform:translateX(105%);transition:transform .25s ease;overflow-y:auto;padding:14px}
+  .drawer.open{transform:none}
+  .drawer h3{margin:16px 0 8px;font-size:14px}
+  .filters{display:flex;gap:6px;flex-wrap:wrap}
+  .filters .btn{padding:6px 11px;font-size:12px}
+  .filters .btn.on{background:#0ea5e9}
+  .list{max-height:38vh;overflow:auto}
+  .item{padding:8px;border-radius:8px;cursor:pointer;border:1px solid transparent;font-size:13px}
+  .item:hover{background:#16233a;border-color:#334155}
+  .item small{color:#9fb0c8}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .legend{font-size:12px;color:#c3d0e2;line-height:1.9}
+  .src{font-size:11px;color:#8fa1ba;line-height:1.6}
+  .pop{font-family:system-ui,Arial,sans-serif;color:#10202f;min-width:250px;max-width:320px}
+  .pop h4{margin:0 0 6px;font-size:15px}
+  .pop .badge{display:inline-block;padding:2px 8px;border-radius:99px;color:#fff;font-size:12px;font-weight:700;margin-bottom:6px}
+  .pop table{border-collapse:collapse;width:100%;font-size:13px}
+  .pop td{padding:3px 4px;border-bottom:1px solid #e2e8f0;vertical-align:top}
+  .pop td:first-child{color:#475569;white-space:nowrap}
+  .pop .src{font-size:11px;color:#64748b;margin-top:6px}
+  @media(max-width:820px){
+    .apptitle{font-size:13px;padding:8px 11px}
+    .topbar{max-width:calc(100vw - 20px)}
+    .tourbar{bottom:12px;padding:6px 10px}
+    .tbtn{width:46px;height:46px}
+    .tbtn.big{width:58px;height:58px}
+    .item{font-size:14px;padding:9px 8px}
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="apptitle">🌧️ Cảnh báo thời tiết · 18–21/10/2026</span>
+  <span id="liveBadge" style="background:#431407;border:1px solid #f97316;padding:8px 12px;border-radius:999px;font-size:12px;font-weight:700">● Đang tải dữ liệu…</span>
+  <button class="btn ghost" onclick="toggleDrawer()">☰ Danh sách</button>
+  <button class="btn" onclick="downloadClean()">⬇ Tải file</button>
+</div>
+<div id="blockedBanner">
+  ❌ <b>Trình xem này chặn tải ảnh nền bản đồ</b> (đã thử Google, Esri, OpenStreetMap đều không tải được).
+  Hãy bấm nút dưới để tải file về máy, rồi mở file bằng <b>Chrome / Safari</b> để thấy nền bản đồ Google Maps.<br>
+  <button class="btn" style="margin-top:8px" onclick="downloadClean()">⬇ Tải file bản đồ về máy</button>
+</div>
+<div id="map"></div>
+<div class="tourbar">
+  <button class="btn ghost tbtn" id="btnPrev" title="Vùng trước">◀</button>
+  <button class="btn tbtn big" id="btnTour" title="Chạy / tạm dừng hoạt cảnh">▶</button>
+  <button class="btn ghost tbtn" id="btnNext" title="Vùng tiếp">▶</button>
+  <span id="tourPos">Vùng 1/4</span>
+</div>
+<div id="drawer" class="drawer">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+    <b style="font-size:15px">📋 Danh sách cảnh báo</b>
+    <button class="btn ghost" onclick="toggleDrawer()">✕ Đóng</button>
+  </div>
+  <div style="margin-top:12px;padding:9px 10px;border-radius:8px;background:#12331f;border:1px solid #2e7d4f;font-size:13px">✅ <b>Không có bão / ATNĐ trên Biển Đông</b> (NCHMF). Cảnh báo chính: mưa lớn Nam Bộ + TP.HCM, gió mạnh trên biển.</div>
+  <h3>📍 Vùng cảnh báo NCHMF (4)</h3>
+  <div class="list" id="zoneList"></div>
+  <h3>📌 Điểm dự báo (40)</h3>
+  <div class="filters" id="filters">
+    <button class="btn on" data-f="all">Tất cả</button>
+    <button class="btn" data-f="warn">Trong vùng cảnh báo</button>
+    <button class="btn" data-f="normal">Bình thường</button>
+  </div>
+  <div class="list" id="pointList" style="margin-top:8px"></div>
+  <h3>🗺️ Nền bản đồ</h3>
+  <p id="mapStatus" style="font-size:12px;color:#fbbf24;margin:0 0 6px">⏳ Đang tải bản đồ…</p>
+  <p style="font-size:12px;margin:0 0 8px">Nền: <span id="baseName">Google</span> · <span id="tileState">đang tải ảnh nền…</span></p>
+  <div style="display:flex;gap:6px">
+    <button class="btn ghost" style="padding:6px 11px;font-size:12px" data-base="google">Google</button>
+    <button class="btn ghost" style="padding:6px 11px;font-size:12px" data-base="esri">Esri</button>
+    <button class="btn ghost" style="padding:6px 11px;font-size:12px" data-base="osm">OSM</button>
+  </div>
+  <h3>ℹ️ Chú thích &amp; nguồn</h3>
+  <div class="legend">
+    <span class="dot" style="background:#ef4444"></span> Mưa rất to (TP.HCM) ·
+    <span class="dot" style="background:#f97316"></span> Mưa lớn / cục bộ<br>
+    <span class="dot" style="background:#eab308"></span> Mưa dông / gió mạnh trên biển ·
+    <span class="dot" style="background:#22c55e"></span> Bình thường<br>
+    ⭕ Vòng nét đứt = ranh giới vùng cảnh báo <b>ước lệ</b> theo mô tả bản tin, không phải ranh giới chính thức.
+  </div>
+  <p class="src"><b>Cập nhật lúc:</b> 07:00 ngày 18/10/2026 (giờ Hà Nội). <b>Nguồn:</b> Trung tâm Dự báo KTTV Quốc gia (NCHMF) qua Znews, Báo Tin Tức (TTXVN), VietnamPlus, BNEWS, vietnam.vn. Số liệu điểm: Open-Meteo (mô hình, lưới ~9–11 km — mưa cục bộ có thể vượt số liệu mô hình, lấy cảnh báo NCHMF làm chuẩn). Tọa độ điểm là tọa độ đại diện tại trung tâm địa danh, không phải tọa độ đo thực địa. Dự báo thay đổi theo thời gian — số liệu trên là ảnh chụp lúc 07:00 ngày 18/10/2026 (giờ Hà Nội).</p>
+</div>
+<script>// Bản đồ cảnh báo thời tiết — bản TRỰC TIẾP (live).
+// Dữ liệu nhúng sẵn ({"updated": "07:00 ngày 18/10/2026 (giờ Hà Nội)", "window": "18–21/10/2026", "window_start": "2026-10-18", "window_end": "2026-10-21", "points": [{"name": "Hà Nội", "province": "Hà Nội", "lat": 21.0278, "lon": 105.8342, "current": "25.4°C, Chủ yếu quang đãng", "rain": 5.2, "rain_day": "21/10", "tmax": 32.4, "tmax_day": "19/10", "gust": 37.1, "gust_day": "21/10", "days": [["2026-10-18", 0.5, 31.9, 21.2], ["2026-10-19", 0.2, 32.4, 28.8], ["2026-10-20", 0.1, 32.4, 28.8], ["2026-10-21", 5.2, 32.3, 37.1]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 5.2 mm (21/10); Nóng nhất: 32.4°C (19/10); Giật mạnh nhất: 37.1 km/h (21/10)."}, {"name": "Hải Phòng", "province": "Hải Phòng", "lat": 20.8449, "lon": 106.6881, "current": "25.5°C, Quang đãng", "rain": 3.2, "rain_day": "21/10", "tmax": 31.7, "tmax_day": "18/10", "gust": 35.6, "gust_day": "21/10", "days": [["2026-10-18", 0.6, 31.7, 26.6], ["2026-10-19", 2.4, 31.1, 31.0], ["2026-10-20", 1.7, 30.9, 25.9], ["2026-10-21", 3.2, 31.2, 35.6]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 3.2 mm (21/10); Nóng nhất: 31.7°C (18/10); Giật mạnh nhất: 35.6 km/h (21/10)."}, {"name": "Hạ Long", "province": "Quảng Ninh", "lat": 20.9599, "lon": 107.0425, "current": "25.4°C, Chủ yếu quang đãng", "rain": 4.3, "rain_day": "21/10", "tmax": 30.2, "tmax_day": "18/10", "gust": 36.7, "gust_day": "21/10", "days": [["2026-10-18", 0.7, 30.2, 30.2], ["2026-10-19", 2.7, 29.4, 33.5], ["2026-10-20", 1.8, 29.7, 31.7], ["2026-10-21", 4.3, 30.1, 36.7]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 4.3 mm (21/10); Nóng nhất: 30.2°C (18/10); Giật mạnh nhất: 36.7 km/h (21/10)."}, {"name": "Lào Cai", "province": "Lào Cai", "lat": 22.4809, "lon": 103.975, "current": "23.5°C, Nhiều mây", "rain": 2.3, "rain_day": "19/10", "tmax": 29.7, "tmax_day": "20/10", "gust": 20.5, "gust_day": "20/10", "days": [["2026-10-18", 0.8, 28.9, 19.8], ["2026-10-19", 2.3, 29.6, 17.3], ["2026-10-20", 1.8, 29.7, 20.5], ["2026-10-21", 0.5, 29.7, 15.8]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 2.3 mm (19/10); Nóng nhất: 29.7°C (20/10); Giật mạnh nhất: 20.5 km/h (20/10)."}, {"name": "Lai Châu", "province": "Lai Châu", "lat": 22.3864, "lon": 103.47, "current": "18.3°C, Chủ yếu quang đãng", "rain": 19.4, "rain_day": "21/10", "tmax": 28.4, "tmax_day": "20/10", "gust": 24.8, "gust_day": "21/10", "days": [["2026-10-18", 1.1, 28.3, 17.3], ["2026-10-19", 2.8, 27.9, 19.1], ["2026-10-20", 2.7, 28.4, 16.9], ["2026-10-21", 19.4, 26.1, 24.8]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 19.4 mm (21/10); Nóng nhất: 28.4°C (20/10); Giật mạnh nhất: 24.8 km/h (21/10)."}, {"name": "Điện Biên Phủ", "province": "Điện Biên", "lat": 21.3855, "lon": 103.0167, "current": "22.1°C, Quang đãng", "rain": 0.7, "rain_day": "21/10", "tmax": 32.9, "tmax_day": "19/10", "gust": 20.5, "gust_day": "21/10", "days": [["2026-10-18", 0.1, 32.8, 15.1], ["2026-10-19", 0.4, 32.9, 14.0], ["2026-10-20", 0.4, 32.8, 18.0], ["2026-10-21", 0.7, 32.1, 20.5]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 0.7 mm (21/10); Nóng nhất: 32.9°C (19/10); Giật mạnh nhất: 20.5 km/h (21/10)."}, {"name": "Sơn La", "province": "Sơn La", "lat": 21.3274, "lon": 103.9144, "current": "22.7°C, Quang đãng", "rain": 1.6, "rain_day": "19/10", "tmax": 30.5, "tmax_day": "19/10", "gust": 35.6, "gust_day": "20/10", "days": [["2026-10-18", 0.5, 29.9, 30.2], ["2026-10-19", 1.6, 30.5, 26.3], ["2026-10-20", 1.4, 30.5, 35.6], ["2026-10-21", 0.0, 29.5, 35.3]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 1.6 mm (19/10); Nóng nhất: 30.5°C (19/10); Giật mạnh nhất: 35.6 km/h (20/10)."}, {"name": "Lạng Sơn", "province": "Lạng Sơn", "lat": 21.853, "lon": 106.761, "current": "23.4°C, Nhiều mây", "rain": 4.3, "rain_day": "21/10", "tmax": 33.5, "tmax_day": "20/10", "gust": 35.6, "gust_day": "21/10", "days": [["2026-10-18", 0.0, 32.8, 29.2], ["2026-10-19", 0.0, 33.2, 32.8], ["2026-10-20", 0.0, 33.5, 25.2], ["2026-10-21", 4.3, 29.0, 35.6]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 4.3 mm (21/10); Nóng nhất: 33.5°C (20/10); Giật mạnh nhất: 35.6 km/h (21/10)."}, {"name": "Cao Bằng", "province": "Cao Bằng", "lat": 22.6657, "lon": 106.2578, "current": "24.2°C, Chủ yếu quang đãng", "rain": 0.9, "rain_day": "21/10", "tmax": 33.8, "tmax_day": "20/10", "gust": 36.0, "gust_day": "21/10", "days": [["2026-10-18", 0.0, 33.0, 27.7], ["2026-10-19", 0.1, 32.8, 32.4], ["2026-10-20", 0.3, 33.8, 34.9], ["2026-10-21", 0.9, 33.0, 36.0]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 0.9 mm (21/10); Nóng nhất: 33.8°C (20/10); Giật mạnh nhất: 36.0 km/h (21/10)."}, {"name": "Thái Nguyên", "province": "Thái Nguyên", "lat": 21.5671, "lon": 105.8252, "current": "25.1°C, Quang đãng", "rain": 1.1, "rain_day": "21/10", "tmax": 32.7, "tmax_day": "21/10", "gust": 32.4, "gust_day": "21/10", "days": [["2026-10-18", 0.0, 31.8, 21.6], ["2026-10-19", 0.2, 32.4, 23.8], ["2026-10-20", 0.5, 32.2, 22.3], ["2026-10-21", 1.1, 32.7, 32.4]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 1.1 mm (21/10); Nóng nhất: 32.7°C (21/10); Giật mạnh nhất: 32.4 km/h (21/10)."}, {"name": "Tuyên Quang", "province": "Tuyên Quang", "lat": 21.8198, "lon": 105.214, "current": "24.6°C, Quang đãng", "rain": 0.9, "rain_day": "21/10", "tmax": 31.8, "tmax_day": "21/10", "gust": 23.8, "gust_day": "21/10", "days": [["2026-10-18", 0.1, 31.2, 20.9], ["2026-10-19", 0.3, 31.1, 22.3], ["2026-10-20", 0.2, 31.6, 19.4], ["2026-10-21", 0.9, 31.8, 23.8]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 0.9 mm (21/10); Nóng nhất: 31.8°C (21/10); Giật mạnh nhất: 23.8 km/h (21/10)."}, {"name": "Việt Trì", "province": "Phú Thọ", "lat": 21.3019, "lon": 105.3984, "current": "24.8°C, Quang đãng", "rain": 1.2, "rain_day": "21/10", "tmax": 32.4, "tmax_day": "19/10", "gust": 31.0, "gust_day": "21/10", "days": [["2026-10-18", 0.0, 31.9, 21.2], ["2026-10-19", 0.0, 32.4, 27.4], ["2026-10-20", 0.0, 32.4, 26.3], ["2026-10-21", 1.2, 31.8, 31.0]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 1.2 mm (21/10); Nóng nhất: 32.4°C (19/10); Giật mạnh nhất: 31.0 km/h (21/10)."}, {"name": "Bắc Ninh", "province": "Bắc Ninh", "lat": 21.186, "lon": 106.0763, "current": "25.1°C, Quang đãng", "rain": 1.2, "rain_day": "21/10", "tmax": 32.3, "tmax_day": "20/10", "gust": 34.6, "gust_day": "21/10", "days": [["2026-10-18", 0.4, 31.8, 19.8], ["2026-10-19", 1.0, 32.2, 25.2], ["2026-10-20", 0.0, 32.3, 23.4], ["2026-10-21", 1.2, 31.9, 34.6]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 1.2 mm (21/10); Nóng nhất: 32.3°C (20/10); Giật mạnh nhất: 34.6 km/h (21/10)."}, {"name": "Hưng Yên", "province": "Hưng Yên", "lat": 20.6464, "lon": 106.0512, "current": "25.4°C, Quang đãng", "rain": 4.3, "rain_day": "21/10", "tmax": 32.2, "tmax_day": "19/10", "gust": 35.3, "gust_day": "21/10", "days": [["2026-10-18", 1.3, 31.5, 21.2], ["2026-10-19", 0.8, 32.2, 24.1], ["2026-10-20", 0.0, 32.0, 20.9], ["2026-10-21", 4.3, 32.1, 35.3]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 4.3 mm (21/10); Nóng nhất: 32.2°C (19/10); Giật mạnh nhất: 35.3 km/h (21/10)."}, {"name": "Ninh Bình", "province": "Ninh Bình", "lat": 20.2506, "lon": 105.9745, "current": "25.4°C, Quang đãng", "rain": 2.3, "rain_day": "21/10", "tmax": 32.2, "tmax_day": "19/10", "gust": 35.3, "gust_day": "21/10", "days": [["2026-10-18", 1.5, 30.8, 27.4], ["2026-10-19", 0.6, 32.2, 28.1], ["2026-10-20", 0.6, 31.7, 24.5], ["2026-10-21", 2.3, 31.6, 35.3]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 2.3 mm (21/10); Nóng nhất: 32.2°C (19/10); Giật mạnh nhất: 35.3 km/h (21/10)."}, {"name": "Thanh Hóa", "province": "Thanh Hóa", "lat": 19.8067, "lon": 105.7852, "current": "24.8°C, Sương mù", "rain": 14.9, "rain_day": "21/10", "tmax": 31.3, "tmax_day": "20/10", "gust": 34.9, "gust_day": "21/10", "days": [["2026-10-18", 1.6, 30.7, 27.7], ["2026-10-19", 1.1, 31.2, 25.6], ["2026-10-20", 0.9, 31.3, 25.2], ["2026-10-21", 14.9, 31.2, 34.9]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 14.9 mm (21/10); Nóng nhất: 31.3°C (20/10); Giật mạnh nhất: 34.9 km/h (21/10)."}, {"name": "Vinh", "province": "Nghệ An", "lat": 18.6796, "lon": 105.6813, "current": "25.1°C, Mây rải rác", "rain": 7.9, "rain_day": "21/10", "tmax": 30.0, "tmax_day": "19/10", "gust": 34.9, "gust_day": "21/10", "days": [["2026-10-18", 1.0, 29.8, 29.9], ["2026-10-19", 0.4, 30.0, 30.6], ["2026-10-20", 1.9, 29.7, 30.2], ["2026-10-21", 7.9, 29.6, 34.9]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 7.9 mm (21/10); Nóng nhất: 30.0°C (19/10); Giật mạnh nhất: 34.9 km/h (21/10)."}, {"name": "Hà Tĩnh", "province": "Hà Tĩnh", "lat": 18.3429, "lon": 105.9058, "current": "24.9°C, Mây rải rác", "rain": 4.6, "rain_day": "21/10", "tmax": 30.2, "tmax_day": "19/10", "gust": 30.2, "gust_day": "19/10", "days": [["2026-10-18", 4.0, 29.8, 29.9], ["2026-10-19", 0.8, 30.2, 30.2], ["2026-10-20", 1.6, 30.1, 28.4], ["2026-10-21", 4.6, 30.0, 29.5]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 4.6 mm (21/10); Nóng nhất: 30.2°C (19/10); Giật mạnh nhất: 30.2 km/h (19/10)."}, {"name": "Đông Hà", "province": "Quảng Trị", "lat": 16.8167, "lon": 107.1, "current": "25.8°C, Quang đãng", "rain": 12.0, "rain_day": "21/10", "tmax": 30.8, "tmax_day": "18/10", "gust": 36.4, "gust_day": "18/10", "days": [["2026-10-18", 2.3, 30.8, 36.4], ["2026-10-19", 2.4, 30.1, 32.4], ["2026-10-20", 2.3, 30.4, 30.2], ["2026-10-21", 12.0, 28.7, 34.6]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 12.0 mm (21/10); Nóng nhất: 30.8°C (18/10); Giật mạnh nhất: 36.4 km/h (18/10)."}, {"name": "Huế", "province": "Huế", "lat": 16.4637, "lon": 107.5909, "current": "25.9°C, Quang đãng", "rain": 17.9, "rain_day": "21/10", "tmax": 30.5, "tmax_day": "18/10", "gust": 38.2, "gust_day": "18/10", "days": [["2026-10-18", 3.5, 30.5, 38.2], ["2026-10-19", 2.5, 29.8, 32.0], ["2026-10-20", 5.8, 30.0, 29.2], ["2026-10-21", 17.9, 29.0, 35.6]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 17.9 mm (21/10); Nóng nhất: 30.5°C (18/10); Giật mạnh nhất: 38.2 km/h (18/10)."}, {"name": "Đà Nẵng", "province": "Đà Nẵng", "lat": 16.0544, "lon": 108.2022, "current": "26.8°C, Chủ yếu quang đãng", "rain": 12.3, "rain_day": "21/10", "tmax": 30.0, "tmax_day": "19/10", "gust": 36.0, "gust_day": "19/10", "days": [["2026-10-18", 1.1, 29.8, 30.6], ["2026-10-19", 3.6, 30.0, 36.0], ["2026-10-20", 4.7, 30.0, 33.1], ["2026-10-21", 12.3, 29.0, 36.0]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 12.3 mm (21/10); Nóng nhất: 30.0°C (19/10); Giật mạnh nhất: 36.0 km/h (19/10)."}, {"name": "Quảng Ngãi", "province": "Quảng Ngãi", "lat": 15.1214, "lon": 108.8045, "current": "25.5°C, Nhiều mây", "rain": 10.6, "rain_day": "21/10", "tmax": 31.5, "tmax_day": "21/10", "gust": 35.6, "gust_day": "21/10", "days": [["2026-10-18", 6.7, 30.1, 27.7], ["2026-10-19", 6.0, 31.2, 34.2], ["2026-10-20", 3.3, 31.1, 28.4], ["2026-10-21", 10.6, 31.5, 35.6]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 10.6 mm (21/10); Nóng nhất: 31.5°C (21/10); Giật mạnh nhất: 35.6 km/h (21/10)."}, {"name": "Quy Nhơn", "province": "Gia Lai", "lat": 13.7764, "lon": 109.2237, "current": "24.8°C, Mưa phùn nhẹ", "rain": 13.5, "rain_day": "18/10", "tmax": 30.7, "tmax_day": "20/10", "gust": 36.0, "gust_day": "19/10", "days": [["2026-10-18", 13.5, 29.6, 31.0], ["2026-10-19", 2.7, 30.5, 36.0], ["2026-10-20", 3.2, 30.7, 30.6], ["2026-10-21", 4.8, 30.6, 34.6]], "type": "Mưa dông, cục bộ mưa to", "level": "Mưa dông, cục bộ mưa to", "color": "yellow", "note": "Mưa lớn nhất: 13.5 mm (18/10); Nóng nhất: 30.7°C (20/10); Giật mạnh nhất: 36.0 km/h (19/10)."}, {"name": "Nha Trang", "province": "Khánh Hòa", "lat": 12.2388, "lon": 109.1967, "current": "25.6°C, Nhiều mây", "rain": 12.3, "rain_day": "18/10", "tmax": 30.2, "tmax_day": "21/10", "gust": 37.8, "gust_day": "19/10", "days": [["2026-10-18", 12.3, 28.3, 29.2], ["2026-10-19", 10.8, 29.2, 37.8], ["2026-10-20", 2.0, 29.4, 30.6], ["2026-10-21", 2.2, 30.2, 36.4]], "type": "Mưa dông, cục bộ mưa to", "level": "Mưa dông, cục bộ mưa to", "color": "yellow", "note": "Mưa lớn nhất: 12.3 mm (18/10); Nóng nhất: 30.2°C (21/10); Giật mạnh nhất: 37.8 km/h (19/10)."}, {"name": "Tuy Hòa", "province": "Đắk Lắk", "lat": 13.0889, "lon": 109.2934, "current": "25.3°C, Mưa phùn", "rain": 15.2, "rain_day": "18/10", "tmax": 29.2, "tmax_day": "19/10", "gust": 38.9, "gust_day": "21/10", "days": [["2026-10-18", 15.2, 28.5, 35.3], ["2026-10-19", 11.1, 29.2, 34.9], ["2026-10-20", 6.9, 29.2, 31.7], ["2026-10-21", 8.5, 29.2, 38.9]], "type": "Mưa dông, cục bộ mưa to", "level": "Mưa dông, cục bộ mưa to", "color": "yellow", "note": "Mưa lớn nhất: 15.2 mm (18/10); Nóng nhất: 29.2°C (19/10); Giật mạnh nhất: 38.9 km/h (21/10)."}, {"name": "Phan Thiết", "province": "Lâm Đồng", "lat": 10.9289, "lon": 108.102, "current": "27.0°C, Nhiều mây", "rain": 9.1, "rain_day": "20/10", "tmax": 30.8, "tmax_day": "21/10", "gust": 44.3, "gust_day": "18/10", "days": [["2026-10-18", 4.6, 29.4, 44.3], ["2026-10-19", 6.7, 30.6, 43.2], ["2026-10-20", 9.1, 30.4, 36.4], ["2026-10-21", 5.2, 30.8, 39.6]], "type": "Mưa dông, cục bộ mưa to", "level": "Mưa dông, cục bộ mưa to", "color": "yellow", "note": "Mưa lớn nhất: 9.1 mm (20/10); Nóng nhất: 30.8°C (21/10); Giật mạnh nhất: 44.3 km/h (18/10)."}, {"name": "Pleiku", "province": "Gia Lai", "lat": 13.9833, "lon": 108.0, "current": "22.3°C, Chủ yếu quang đãng", "rain": 4.9, "rain_day": "19/10", "tmax": 29.3, "tmax_day": "21/10", "gust": 39.2, "gust_day": "19/10", "days": [["2026-10-18", 3.7, 27.5, 38.9], ["2026-10-19", 4.9, 28.4, 39.2], ["2026-10-20", 3.0, 29.1, 29.9], ["2026-10-21", 4.6, 29.3, 28.4]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 4.9 mm (19/10); Nóng nhất: 29.3°C (21/10); Giật mạnh nhất: 39.2 km/h (19/10)."}, {"name": "Buôn Ma Thuột", "province": "Đắk Lắk", "lat": 12.6667, "lon": 108.05, "current": "23.9°C, Nhiều mây", "rain": 4.8, "rain_day": "21/10", "tmax": 30.8, "tmax_day": "21/10", "gust": 37.1, "gust_day": "18/10", "days": [["2026-10-18", 2.1, 29.1, 37.1], ["2026-10-19", 3.3, 30.0, 32.0], ["2026-10-20", 3.5, 30.3, 32.0], ["2026-10-21", 4.8, 30.8, 29.9]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 4.8 mm (21/10); Nóng nhất: 30.8°C (21/10); Giật mạnh nhất: 37.1 km/h (18/10)."}, {"name": "Đà Lạt", "province": "Lâm Đồng", "lat": 11.9412, "lon": 108.4583, "current": "17.6°C, Sương mù", "rain": 21.2, "rain_day": "21/10", "tmax": 25.5, "tmax_day": "21/10", "gust": 40.7, "gust_day": "18/10", "days": [["2026-10-18", 2.5, 22.5, 40.7], ["2026-10-19", 6.5, 24.3, 40.0], ["2026-10-20", 9.3, 24.1, 30.6], ["2026-10-21", 21.2, 25.5, 25.9]], "type": "Mưa dông, cục bộ mưa to", "level": "Mưa dông, cục bộ mưa to", "color": "yellow", "note": "Mưa lớn nhất: 21.2 mm (21/10); Nóng nhất: 25.5°C (21/10); Giật mạnh nhất: 40.7 km/h (18/10)."}, {"name": "Kon Tum", "province": "Quảng Ngãi", "lat": 14.3497, "lon": 108.0, "current": "23.6°C, Mây rải rác", "rain": 2.9, "rain_day": "21/10", "tmax": 31.4, "tmax_day": "20/10", "gust": 37.4, "gust_day": "18/10", "days": [["2026-10-18", 1.9, 30.7, 37.4], ["2026-10-19", 1.0, 30.7, 31.0], ["2026-10-20", 1.1, 31.4, 23.0], ["2026-10-21", 2.9, 30.3, 29.5]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 2.9 mm (21/10); Nóng nhất: 31.4°C (20/10); Giật mạnh nhất: 37.4 km/h (18/10)."}, {"name": "Gia Nghĩa", "province": "Lâm Đồng", "lat": 11.9897, "lon": 107.6964, "current": "22.4°C, Nhiều mây", "rain": 16.4, "rain_day": "19/10", "tmax": 29.7, "tmax_day": "21/10", "gust": 36.4, "gust_day": "20/10", "days": [["2026-10-18", 9.1, 29.1, 30.2], ["2026-10-19", 16.4, 28.6, 26.3], ["2026-10-20", 9.4, 29.1, 36.4], ["2026-10-21", 5.3, 29.7, 27.7]], "type": "Mưa dông, cục bộ mưa to", "level": "Mưa dông, cục bộ mưa to", "color": "yellow", "note": "Mưa lớn nhất: 16.4 mm (19/10); Nóng nhất: 29.7°C (21/10); Giật mạnh nhất: 36.4 km/h (20/10)."}, {"name": "TP. Hồ Chí Minh", "province": "TP. Hồ Chí Minh", "lat": 10.8231, "lon": 106.6297, "current": "26.2°C, Nhiều mây", "rain": 12.0, "rain_day": "21/10", "tmax": 31.6, "tmax_day": "21/10", "gust": 40.7, "gust_day": "19/10", "days": [["2026-10-18", 10.6, 29.8, 31.7], ["2026-10-19", 10.5, 30.8, 40.7], ["2026-10-20", 10.1, 31.0, 33.1], ["2026-10-21", 12.0, 31.6, 24.5]], "type": "Mưa rất to", "level": "Mưa rất to", "color": "red", "note": "Mưa lớn nhất: 12.0 mm (21/10); Nóng nhất: 31.6°C (21/10); Giật mạnh nhất: 40.7 km/h (19/10)."}, {"name": "Biên Hòa", "province": "Đồng Nai", "lat": 10.9574, "lon": 106.8427, "current": "26.3°C, Nhiều mây", "rain": 14.4, "rain_day": "19/10", "tmax": 31.4, "tmax_day": "21/10", "gust": 37.8, "gust_day": "19/10", "days": [["2026-10-18", 8.8, 30.1, 33.5], ["2026-10-19", 14.4, 31.1, 37.8], ["2026-10-20", 12.7, 30.6, 30.2], ["2026-10-21", 7.5, 31.4, 24.8]], "type": "Mưa lớn", "level": "Mưa lớn", "color": "orange", "note": "Mưa lớn nhất: 14.4 mm (19/10); Nóng nhất: 31.4°C (21/10); Giật mạnh nhất: 37.8 km/h (19/10)."}, {"name": "Tây Ninh", "province": "Tây Ninh", "lat": 11.3353, "lon": 106.1099, "current": "24.9°C, Nhiều mây", "rain": 16.6, "rain_day": "21/10", "tmax": 31.4, "tmax_day": "18/10", "gust": 35.6, "gust_day": "18/10", "days": [["2026-10-18", 15.3, 31.4, 35.6], ["2026-10-19", 10.4, 31.3, 30.2], ["2026-10-20", 14.4, 30.9, 28.1], ["2026-10-21", 16.6, 30.9, 19.8]], "type": "Mưa lớn", "level": "Mưa lớn", "color": "orange", "note": "Mưa lớn nhất: 16.6 mm (21/10); Nóng nhất: 31.4°C (18/10); Giật mạnh nhất: 35.6 km/h (18/10)."}, {"name": "Cao Lãnh", "province": "Đồng Tháp", "lat": 10.4694, "lon": 105.6325, "current": "25.2°C, Nhiều mây", "rain": 27.9, "rain_day": "21/10", "tmax": 32.4, "tmax_day": "21/10", "gust": 32.8, "gust_day": "18/10", "days": [["2026-10-18", 12.2, 30.2, 32.8], ["2026-10-19", 13.3, 31.6, 29.9], ["2026-10-20", 23.1, 31.9, 28.4], ["2026-10-21", 27.9, 32.4, 26.3]], "type": "Mưa lớn", "level": "Mưa lớn", "color": "orange", "note": "Mưa lớn nhất: 27.9 mm (21/10); Nóng nhất: 32.4°C (21/10); Giật mạnh nhất: 32.8 km/h (18/10)."}, {"name": "Long Xuyên", "province": "An Giang", "lat": 10.3871, "lon": 105.4356, "current": "25.2°C, Nhiều mây", "rain": 30.9, "rain_day": "20/10", "tmax": 32.4, "tmax_day": "21/10", "gust": 33.8, "gust_day": "18/10", "days": [["2026-10-18", 7.4, 30.4, 33.8], ["2026-10-19", 18.6, 32.3, 31.7], ["2026-10-20", 30.9, 32.1, 33.1], ["2026-10-21", 14.6, 32.4, 22.7]], "type": "Mưa lớn", "level": "Mưa lớn", "color": "orange", "note": "Mưa lớn nhất: 30.9 mm (20/10); Nóng nhất: 32.4°C (21/10); Giật mạnh nhất: 33.8 km/h (18/10)."}, {"name": "Rạch Giá", "province": "An Giang", "lat": 10.0125, "lon": 105.08, "current": "25.0°C, Nhiều mây", "rain": 18.7, "rain_day": "19/10", "tmax": 32.7, "tmax_day": "21/10", "gust": 36.4, "gust_day": "20/10", "days": [["2026-10-18", 10.4, 32.2, 29.2], ["2026-10-19", 18.7, 31.8, 34.6], ["2026-10-20", 13.5, 32.2, 36.4], ["2026-10-21", 13.7, 32.7, 35.3]], "type": "Mưa lớn", "level": "Mưa lớn", "color": "orange", "note": "Mưa lớn nhất: 18.7 mm (19/10); Nóng nhất: 32.7°C (21/10); Giật mạnh nhất: 36.4 km/h (20/10)."}, {"name": "Vĩnh Long", "province": "Vĩnh Long", "lat": 10.2536, "lon": 105.9725, "current": "25.2°C, Nhiều mây", "rain": 21.1, "rain_day": "18/10", "tmax": 31.3, "tmax_day": "21/10", "gust": 38.9, "gust_day": "19/10", "days": [["2026-10-18", 21.1, 29.2, 31.0], ["2026-10-19", 9.6, 30.5, 38.9], ["2026-10-20", 7.7, 30.3, 28.8], ["2026-10-21", 11.8, 31.3, 30.2]], "type": "Mưa lớn", "level": "Mưa lớn", "color": "orange", "note": "Mưa lớn nhất: 21.1 mm (18/10); Nóng nhất: 31.3°C (21/10); Giật mạnh nhất: 38.9 km/h (19/10)."}, {"name": "Cần Thơ", "province": "Cần Thơ", "lat": 10.0452, "lon": 105.7469, "current": "25.1°C, Nhiều mây", "rain": 21.5, "rain_day": "21/10", "tmax": 31.9, "tmax_day": "21/10", "gust": 33.8, "gust_day": "20/10", "days": [["2026-10-18", 14.1, 29.0, 29.9], ["2026-10-19", 10.6, 29.8, 33.1], ["2026-10-20", 15.3, 31.3, 33.8], ["2026-10-21", 21.5, 31.9, 25.6]], "type": "Mưa lớn", "level": "Mưa lớn", "color": "orange", "note": "Mưa lớn nhất: 21.5 mm (21/10); Nóng nhất: 31.9°C (21/10); Giật mạnh nhất: 33.8 km/h (20/10)."}, {"name": "Cà Mau", "province": "Cà Mau", "lat": 9.1768, "lon": 105.1524, "current": "25.4°C, Nhiều mây", "rain": 20.2, "rain_day": "20/10", "tmax": 32.4, "tmax_day": "21/10", "gust": 31.3, "gust_day": "18/10", "days": [["2026-10-18", 15.5, 28.6, 31.3], ["2026-10-19", 17.1, 29.1, 25.9], ["2026-10-20", 20.2, 30.5, 29.5], ["2026-10-21", 10.3, 32.4, 28.1]], "type": "Mưa lớn", "level": "Mưa lớn", "color": "orange", "note": "Mưa lớn nhất: 20.2 mm (20/10); Nóng nhất: 32.4°C (21/10); Giật mạnh nhất: 31.3 km/h (18/10)."}], "zones": [{"id": "Z1", "name": "Nam Bộ — Mưa lớn", "lat": 10.0452, "lon": 105.7469, "radius_km": 130, "level": "Mưa lớn", "color": "orange", "date": "18/10/2026", "content": "Chiều và tối 18/10: mưa rào và dông rải rác, cục bộ có nơi mưa to. Trong mưa dông có lốc, sét và gió giật mạnh. Đề phòng ngập úng vùng trũng thấp, khu đô thị, ven sông/kênh rạch.", "source": "NCHMF qua vietnam.vn / Báo Lao Động", "link": "https://www.vietnam.vn/du-bao-thoi-tiet-dem-nay-va-ngay-mai-18-10-2026-bac-bo-ngay-nang-nam-bo-co-noi-mua-to"}, {"id": "Z2", "name": "Duyên hải Nam Trung Bộ (phía Nam) + Lâm Đồng — Mưa dông, cục bộ mưa to", "lat": 12.2, "lon": 108.5, "radius_km": 140, "level": "Mưa dông, cục bộ mưa to", "color": "yellow", "date": "18/10/2026", "content": "Chiều và tối 18/10: phía Nam duyên hải Nam Trung Bộ và Lâm Đồng có mưa rào và dông rải rác, cục bộ có nơi mưa to. Trong mưa dông có lốc, sét và gió giật mạnh.", "source": "NCHMF qua vietnam.vn / Báo Lao Động", "link": "https://www.vietnam.vn/du-bao-thoi-tiet-dem-nay-va-ngay-mai-18-10-2026-bac-bo-ngay-nang-nam-bo-co-noi-mua-to"}, {"id": "Z3", "name": "TP. Hồ Chí Minh — Mưa rất to", "lat": 10.8231, "lon": 106.6297, "radius_km": 35, "level": "Mưa rất to", "color": "red", "date": "18–20/10/2026", "content": "Tổng lượng mưa đợt 17–20/10: 100–200 mm, có nơi trên 250 mm (phần còn lại 18–20/10 vẫn trong đợt mưa này). Đề phòng ngập úng vùng trũng thấp, khu đô thị, công nghiệp, ven sông/kênh rạch. Trong mưa dông có lốc, sét, mưa đá, gió giật mạnh.", "source": "NCHMF + Đài KTTV Nam Bộ qua Znews", "link": "https://lifestyle.zingnews.vn/du-bao-tphcm-mua-lon-4-ngay-co-noi-tren-250-mm-post1690202.html"}, {"id": "Z4", "name": "Đông Bắc Bộ + Thanh Hóa → Huế — Theo dõi 21–22/10", "lat": 19.0, "lon": 106.0, "radius_km": 220, "level": "Theo dõi (chưa phải cảnh báo)", "color": "watch", "date": "21–22/10/2026 (dự báo trước)", "content": "Không khí lạnh lệch đông khoảng 19–21/10, dự kiến gây mưa rào và dông rải rác, cục bộ có nơi mưa to đến rất to ngày 21–22/10 tại Đông Bắc Bộ và Thanh Hóa đến Huế. Đây là dự báo trước — theo dõi bản tin tiếp theo của NCHMF.", "source": "NCHMF qua Soha / Eva", "link": "https://soha.vn/nhieu-noi-sap-co-mua-to-den-rat-to-trong-2-ngay-lien-tiep-198261017183502882.htm"}]}) là dự phòng. Khi mở trang, script thử đọc dữ liệu
+// tươi từ Google Sheet bằng JSONP (thẻ <script> gọi gviz, không bị chặn CORS).
+// Đọc được → vẽ lại bằng dữ liệu tươi + báo "Trực tiếp từ Sheet".
+// Không đọc được (mất mạng / bị chặn) → giữ dữ liệu nhúng sẵn + báo rõ.
+const EMBEDDED = {"updated": "07:00 ngày 18/10/2026 (giờ Hà Nội)", "window": "18–21/10/2026", "window_start": "2026-10-18", "window_end": "2026-10-21", "points": [{"name": "Hà Nội", "province": "Hà Nội", "lat": 21.0278, "lon": 105.8342, "current": "25.4°C, Chủ yếu quang đãng", "rain": 5.2, "rain_day": "21/10", "tmax": 32.4, "tmax_day": "19/10", "gust": 37.1, "gust_day": "21/10", "days": [["2026-10-18", 0.5, 31.9, 21.2], ["2026-10-19", 0.2, 32.4, 28.8], ["2026-10-20", 0.1, 32.4, 28.8], ["2026-10-21", 5.2, 32.3, 37.1]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 5.2 mm (21/10); Nóng nhất: 32.4°C (19/10); Giật mạnh nhất: 37.1 km/h (21/10)."}, {"name": "Hải Phòng", "province": "Hải Phòng", "lat": 20.8449, "lon": 106.6881, "current": "25.5°C, Quang đãng", "rain": 3.2, "rain_day": "21/10", "tmax": 31.7, "tmax_day": "18/10", "gust": 35.6, "gust_day": "21/10", "days": [["2026-10-18", 0.6, 31.7, 26.6], ["2026-10-19", 2.4, 31.1, 31.0], ["2026-10-20", 1.7, 30.9, 25.9], ["2026-10-21", 3.2, 31.2, 35.6]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 3.2 mm (21/10); Nóng nhất: 31.7°C (18/10); Giật mạnh nhất: 35.6 km/h (21/10)."}, {"name": "Hạ Long", "province": "Quảng Ninh", "lat": 20.9599, "lon": 107.0425, "current": "25.4°C, Chủ yếu quang đãng", "rain": 4.3, "rain_day": "21/10", "tmax": 30.2, "tmax_day": "18/10", "gust": 36.7, "gust_day": "21/10", "days": [["2026-10-18", 0.7, 30.2, 30.2], ["2026-10-19", 2.7, 29.4, 33.5], ["2026-10-20", 1.8, 29.7, 31.7], ["2026-10-21", 4.3, 30.1, 36.7]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 4.3 mm (21/10); Nóng nhất: 30.2°C (18/10); Giật mạnh nhất: 36.7 km/h (21/10)."}, {"name": "Lào Cai", "province": "Lào Cai", "lat": 22.4809, "lon": 103.975, "current": "23.5°C, Nhiều mây", "rain": 2.3, "rain_day": "19/10", "tmax": 29.7, "tmax_day": "20/10", "gust": 20.5, "gust_day": "20/10", "days": [["2026-10-18", 0.8, 28.9, 19.8], ["2026-10-19", 2.3, 29.6, 17.3], ["2026-10-20", 1.8, 29.7, 20.5], ["2026-10-21", 0.5, 29.7, 15.8]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 2.3 mm (19/10); Nóng nhất: 29.7°C (20/10); Giật mạnh nhất: 20.5 km/h (20/10)."}, {"name": "Lai Châu", "province": "Lai Châu", "lat": 22.3864, "lon": 103.47, "current": "18.3°C, Chủ yếu quang đãng", "rain": 19.4, "rain_day": "21/10", "tmax": 28.4, "tmax_day": "20/10", "gust": 24.8, "gust_day": "21/10", "days": [["2026-10-18", 1.1, 28.3, 17.3], ["2026-10-19", 2.8, 27.9, 19.1], ["2026-10-20", 2.7, 28.4, 16.9], ["2026-10-21", 19.4, 26.1, 24.8]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 19.4 mm (21/10); Nóng nhất: 28.4°C (20/10); Giật mạnh nhất: 24.8 km/h (21/10)."}, {"name": "Điện Biên Phủ", "province": "Điện Biên", "lat": 21.3855, "lon": 103.0167, "current": "22.1°C, Quang đãng", "rain": 0.7, "rain_day": "21/10", "tmax": 32.9, "tmax_day": "19/10", "gust": 20.5, "gust_day": "21/10", "days": [["2026-10-18", 0.1, 32.8, 15.1], ["2026-10-19", 0.4, 32.9, 14.0], ["2026-10-20", 0.4, 32.8, 18.0], ["2026-10-21", 0.7, 32.1, 20.5]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 0.7 mm (21/10); Nóng nhất: 32.9°C (19/10); Giật mạnh nhất: 20.5 km/h (21/10)."}, {"name": "Sơn La", "province": "Sơn La", "lat": 21.3274, "lon": 103.9144, "current": "22.7°C, Quang đãng", "rain": 1.6, "rain_day": "19/10", "tmax": 30.5, "tmax_day": "19/10", "gust": 35.6, "gust_day": "20/10", "days": [["2026-10-18", 0.5, 29.9, 30.2], ["2026-10-19", 1.6, 30.5, 26.3], ["2026-10-20", 1.4, 30.5, 35.6], ["2026-10-21", 0.0, 29.5, 35.3]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 1.6 mm (19/10); Nóng nhất: 30.5°C (19/10); Giật mạnh nhất: 35.6 km/h (20/10)."}, {"name": "Lạng Sơn", "province": "Lạng Sơn", "lat": 21.853, "lon": 106.761, "current": "23.4°C, Nhiều mây", "rain": 4.3, "rain_day": "21/10", "tmax": 33.5, "tmax_day": "20/10", "gust": 35.6, "gust_day": "21/10", "days": [["2026-10-18", 0.0, 32.8, 29.2], ["2026-10-19", 0.0, 33.2, 32.8], ["2026-10-20", 0.0, 33.5, 25.2], ["2026-10-21", 4.3, 29.0, 35.6]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 4.3 mm (21/10); Nóng nhất: 33.5°C (20/10); Giật mạnh nhất: 35.6 km/h (21/10)."}, {"name": "Cao Bằng", "province": "Cao Bằng", "lat": 22.6657, "lon": 106.2578, "current": "24.2°C, Chủ yếu quang đãng", "rain": 0.9, "rain_day": "21/10", "tmax": 33.8, "tmax_day": "20/10", "gust": 36.0, "gust_day": "21/10", "days": [["2026-10-18", 0.0, 33.0, 27.7], ["2026-10-19", 0.1, 32.8, 32.4], ["2026-10-20", 0.3, 33.8, 34.9], ["2026-10-21", 0.9, 33.0, 36.0]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 0.9 mm (21/10); Nóng nhất: 33.8°C (20/10); Giật mạnh nhất: 36.0 km/h (21/10)."}, {"name": "Thái Nguyên", "province": "Thái Nguyên", "lat": 21.5671, "lon": 105.8252, "current": "25.1°C, Quang đãng", "rain": 1.1, "rain_day": "21/10", "tmax": 32.7, "tmax_day": "21/10", "gust": 32.4, "gust_day": "21/10", "days": [["2026-10-18", 0.0, 31.8, 21.6], ["2026-10-19", 0.2, 32.4, 23.8], ["2026-10-20", 0.5, 32.2, 22.3], ["2026-10-21", 1.1, 32.7, 32.4]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 1.1 mm (21/10); Nóng nhất: 32.7°C (21/10); Giật mạnh nhất: 32.4 km/h (21/10)."}, {"name": "Tuyên Quang", "province": "Tuyên Quang", "lat": 21.8198, "lon": 105.214, "current": "24.6°C, Quang đãng", "rain": 0.9, "rain_day": "21/10", "tmax": 31.8, "tmax_day": "21/10", "gust": 23.8, "gust_day": "21/10", "days": [["2026-10-18", 0.1, 31.2, 20.9], ["2026-10-19", 0.3, 31.1, 22.3], ["2026-10-20", 0.2, 31.6, 19.4], ["2026-10-21", 0.9, 31.8, 23.8]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 0.9 mm (21/10); Nóng nhất: 31.8°C (21/10); Giật mạnh nhất: 23.8 km/h (21/10)."}, {"name": "Việt Trì", "province": "Phú Thọ", "lat": 21.3019, "lon": 105.3984, "current": "24.8°C, Quang đãng", "rain": 1.2, "rain_day": "21/10", "tmax": 32.4, "tmax_day": "19/10", "gust": 31.0, "gust_day": "21/10", "days": [["2026-10-18", 0.0, 31.9, 21.2], ["2026-10-19", 0.0, 32.4, 27.4], ["2026-10-20", 0.0, 32.4, 26.3], ["2026-10-21", 1.2, 31.8, 31.0]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 1.2 mm (21/10); Nóng nhất: 32.4°C (19/10); Giật mạnh nhất: 31.0 km/h (21/10)."}, {"name": "Bắc Ninh", "province": "Bắc Ninh", "lat": 21.186, "lon": 106.0763, "current": "25.1°C, Quang đãng", "rain": 1.2, "rain_day": "21/10", "tmax": 32.3, "tmax_day": "20/10", "gust": 34.6, "gust_day": "21/10", "days": [["2026-10-18", 0.4, 31.8, 19.8], ["2026-10-19", 1.0, 32.2, 25.2], ["2026-10-20", 0.0, 32.3, 23.4], ["2026-10-21", 1.2, 31.9, 34.6]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 1.2 mm (21/10); Nóng nhất: 32.3°C (20/10); Giật mạnh nhất: 34.6 km/h (21/10)."}, {"name": "Hưng Yên", "province": "Hưng Yên", "lat": 20.6464, "lon": 106.0512, "current": "25.4°C, Quang đãng", "rain": 4.3, "rain_day": "21/10", "tmax": 32.2, "tmax_day": "19/10", "gust": 35.3, "gust_day": "21/10", "days": [["2026-10-18", 1.3, 31.5, 21.2], ["2026-10-19", 0.8, 32.2, 24.1], ["2026-10-20", 0.0, 32.0, 20.9], ["2026-10-21", 4.3, 32.1, 35.3]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 4.3 mm (21/10); Nóng nhất: 32.2°C (19/10); Giật mạnh nhất: 35.3 km/h (21/10)."}, {"name": "Ninh Bình", "province": "Ninh Bình", "lat": 20.2506, "lon": 105.9745, "current": "25.4°C, Quang đãng", "rain": 2.3, "rain_day": "21/10", "tmax": 32.2, "tmax_day": "19/10", "gust": 35.3, "gust_day": "21/10", "days": [["2026-10-18", 1.5, 30.8, 27.4], ["2026-10-19", 0.6, 32.2, 28.1], ["2026-10-20", 0.6, 31.7, 24.5], ["2026-10-21", 2.3, 31.6, 35.3]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 2.3 mm (21/10); Nóng nhất: 32.2°C (19/10); Giật mạnh nhất: 35.3 km/h (21/10)."}, {"name": "Thanh Hóa", "province": "Thanh Hóa", "lat": 19.8067, "lon": 105.7852, "current": "24.8°C, Sương mù", "rain": 14.9, "rain_day": "21/10", "tmax": 31.3, "tmax_day": "20/10", "gust": 34.9, "gust_day": "21/10", "days": [["2026-10-18", 1.6, 30.7, 27.7], ["2026-10-19", 1.1, 31.2, 25.6], ["2026-10-20", 0.9, 31.3, 25.2], ["2026-10-21", 14.9, 31.2, 34.9]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 14.9 mm (21/10); Nóng nhất: 31.3°C (20/10); Giật mạnh nhất: 34.9 km/h (21/10)."}, {"name": "Vinh", "province": "Nghệ An", "lat": 18.6796, "lon": 105.6813, "current": "25.1°C, Mây rải rác", "rain": 7.9, "rain_day": "21/10", "tmax": 30.0, "tmax_day": "19/10", "gust": 34.9, "gust_day": "21/10", "days": [["2026-10-18", 1.0, 29.8, 29.9], ["2026-10-19", 0.4, 30.0, 30.6], ["2026-10-20", 1.9, 29.7, 30.2], ["2026-10-21", 7.9, 29.6, 34.9]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 7.9 mm (21/10); Nóng nhất: 30.0°C (19/10); Giật mạnh nhất: 34.9 km/h (21/10)."}, {"name": "Hà Tĩnh", "province": "Hà Tĩnh", "lat": 18.3429, "lon": 105.9058, "current": "24.9°C, Mây rải rác", "rain": 4.6, "rain_day": "21/10", "tmax": 30.2, "tmax_day": "19/10", "gust": 30.2, "gust_day": "19/10", "days": [["2026-10-18", 4.0, 29.8, 29.9], ["2026-10-19", 0.8, 30.2, 30.2], ["2026-10-20", 1.6, 30.1, 28.4], ["2026-10-21", 4.6, 30.0, 29.5]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 4.6 mm (21/10); Nóng nhất: 30.2°C (19/10); Giật mạnh nhất: 30.2 km/h (19/10)."}, {"name": "Đông Hà", "province": "Quảng Trị", "lat": 16.8167, "lon": 107.1, "current": "25.8°C, Quang đãng", "rain": 12.0, "rain_day": "21/10", "tmax": 30.8, "tmax_day": "18/10", "gust": 36.4, "gust_day": "18/10", "days": [["2026-10-18", 2.3, 30.8, 36.4], ["2026-10-19", 2.4, 30.1, 32.4], ["2026-10-20", 2.3, 30.4, 30.2], ["2026-10-21", 12.0, 28.7, 34.6]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 12.0 mm (21/10); Nóng nhất: 30.8°C (18/10); Giật mạnh nhất: 36.4 km/h (18/10)."}, {"name": "Huế", "province": "Huế", "lat": 16.4637, "lon": 107.5909, "current": "25.9°C, Quang đãng", "rain": 17.9, "rain_day": "21/10", "tmax": 30.5, "tmax_day": "18/10", "gust": 38.2, "gust_day": "18/10", "days": [["2026-10-18", 3.5, 30.5, 38.2], ["2026-10-19", 2.5, 29.8, 32.0], ["2026-10-20", 5.8, 30.0, 29.2], ["2026-10-21", 17.9, 29.0, 35.6]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 17.9 mm (21/10); Nóng nhất: 30.5°C (18/10); Giật mạnh nhất: 38.2 km/h (18/10)."}, {"name": "Đà Nẵng", "province": "Đà Nẵng", "lat": 16.0544, "lon": 108.2022, "current": "26.8°C, Chủ yếu quang đãng", "rain": 12.3, "rain_day": "21/10", "tmax": 30.0, "tmax_day": "19/10", "gust": 36.0, "gust_day": "19/10", "days": [["2026-10-18", 1.1, 29.8, 30.6], ["2026-10-19", 3.6, 30.0, 36.0], ["2026-10-20", 4.7, 30.0, 33.1], ["2026-10-21", 12.3, 29.0, 36.0]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 12.3 mm (21/10); Nóng nhất: 30.0°C (19/10); Giật mạnh nhất: 36.0 km/h (19/10)."}, {"name": "Quảng Ngãi", "province": "Quảng Ngãi", "lat": 15.1214, "lon": 108.8045, "current": "25.5°C, Nhiều mây", "rain": 10.6, "rain_day": "21/10", "tmax": 31.5, "tmax_day": "21/10", "gust": 35.6, "gust_day": "21/10", "days": [["2026-10-18", 6.7, 30.1, 27.7], ["2026-10-19", 6.0, 31.2, 34.2], ["2026-10-20", 3.3, 31.1, 28.4], ["2026-10-21", 10.6, 31.5, 35.6]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 10.6 mm (21/10); Nóng nhất: 31.5°C (21/10); Giật mạnh nhất: 35.6 km/h (21/10)."}, {"name": "Quy Nhơn", "province": "Gia Lai", "lat": 13.7764, "lon": 109.2237, "current": "24.8°C, Mưa phùn nhẹ", "rain": 13.5, "rain_day": "18/10", "tmax": 30.7, "tmax_day": "20/10", "gust": 36.0, "gust_day": "19/10", "days": [["2026-10-18", 13.5, 29.6, 31.0], ["2026-10-19", 2.7, 30.5, 36.0], ["2026-10-20", 3.2, 30.7, 30.6], ["2026-10-21", 4.8, 30.6, 34.6]], "type": "Mưa dông, cục bộ mưa to", "level": "Mưa dông, cục bộ mưa to", "color": "yellow", "note": "Mưa lớn nhất: 13.5 mm (18/10); Nóng nhất: 30.7°C (20/10); Giật mạnh nhất: 36.0 km/h (19/10)."}, {"name": "Nha Trang", "province": "Khánh Hòa", "lat": 12.2388, "lon": 109.1967, "current": "25.6°C, Nhiều mây", "rain": 12.3, "rain_day": "18/10", "tmax": 30.2, "tmax_day": "21/10", "gust": 37.8, "gust_day": "19/10", "days": [["2026-10-18", 12.3, 28.3, 29.2], ["2026-10-19", 10.8, 29.2, 37.8], ["2026-10-20", 2.0, 29.4, 30.6], ["2026-10-21", 2.2, 30.2, 36.4]], "type": "Mưa dông, cục bộ mưa to", "level": "Mưa dông, cục bộ mưa to", "color": "yellow", "note": "Mưa lớn nhất: 12.3 mm (18/10); Nóng nhất: 30.2°C (21/10); Giật mạnh nhất: 37.8 km/h (19/10)."}, {"name": "Tuy Hòa", "province": "Đắk Lắk", "lat": 13.0889, "lon": 109.2934, "current": "25.3°C, Mưa phùn", "rain": 15.2, "rain_day": "18/10", "tmax": 29.2, "tmax_day": "19/10", "gust": 38.9, "gust_day": "21/10", "days": [["2026-10-18", 15.2, 28.5, 35.3], ["2026-10-19", 11.1, 29.2, 34.9], ["2026-10-20", 6.9, 29.2, 31.7], ["2026-10-21", 8.5, 29.2, 38.9]], "type": "Mưa dông, cục bộ mưa to", "level": "Mưa dông, cục bộ mưa to", "color": "yellow", "note": "Mưa lớn nhất: 15.2 mm (18/10); Nóng nhất: 29.2°C (19/10); Giật mạnh nhất: 38.9 km/h (21/10)."}, {"name": "Phan Thiết", "province": "Lâm Đồng", "lat": 10.9289, "lon": 108.102, "current": "27.0°C, Nhiều mây", "rain": 9.1, "rain_day": "20/10", "tmax": 30.8, "tmax_day": "21/10", "gust": 44.3, "gust_day": "18/10", "days": [["2026-10-18", 4.6, 29.4, 44.3], ["2026-10-19", 6.7, 30.6, 43.2], ["2026-10-20", 9.1, 30.4, 36.4], ["2026-10-21", 5.2, 30.8, 39.6]], "type": "Mưa dông, cục bộ mưa to", "level": "Mưa dông, cục bộ mưa to", "color": "yellow", "note": "Mưa lớn nhất: 9.1 mm (20/10); Nóng nhất: 30.8°C (21/10); Giật mạnh nhất: 44.3 km/h (18/10)."}, {"name": "Pleiku", "province": "Gia Lai", "lat": 13.9833, "lon": 108.0, "current": "22.3°C, Chủ yếu quang đãng", "rain": 4.9, "rain_day": "19/10", "tmax": 29.3, "tmax_day": "21/10", "gust": 39.2, "gust_day": "19/10", "days": [["2026-10-18", 3.7, 27.5, 38.9], ["2026-10-19", 4.9, 28.4, 39.2], ["2026-10-20", 3.0, 29.1, 29.9], ["2026-10-21", 4.6, 29.3, 28.4]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 4.9 mm (19/10); Nóng nhất: 29.3°C (21/10); Giật mạnh nhất: 39.2 km/h (19/10)."}, {"name": "Buôn Ma Thuột", "province": "Đắk Lắk", "lat": 12.6667, "lon": 108.05, "current": "23.9°C, Nhiều mây", "rain": 4.8, "rain_day": "21/10", "tmax": 30.8, "tmax_day": "21/10", "gust": 37.1, "gust_day": "18/10", "days": [["2026-10-18", 2.1, 29.1, 37.1], ["2026-10-19", 3.3, 30.0, 32.0], ["2026-10-20", 3.5, 30.3, 32.0], ["2026-10-21", 4.8, 30.8, 29.9]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 4.8 mm (21/10); Nóng nhất: 30.8°C (21/10); Giật mạnh nhất: 37.1 km/h (18/10)."}, {"name": "Đà Lạt", "province": "Lâm Đồng", "lat": 11.9412, "lon": 108.4583, "current": "17.6°C, Sương mù", "rain": 21.2, "rain_day": "21/10", "tmax": 25.5, "tmax_day": "21/10", "gust": 40.7, "gust_day": "18/10", "days": [["2026-10-18", 2.5, 22.5, 40.7], ["2026-10-19", 6.5, 24.3, 40.0], ["2026-10-20", 9.3, 24.1, 30.6], ["2026-10-21", 21.2, 25.5, 25.9]], "type": "Mưa dông, cục bộ mưa to", "level": "Mưa dông, cục bộ mưa to", "color": "yellow", "note": "Mưa lớn nhất: 21.2 mm (21/10); Nóng nhất: 25.5°C (21/10); Giật mạnh nhất: 40.7 km/h (18/10)."}, {"name": "Kon Tum", "province": "Quảng Ngãi", "lat": 14.3497, "lon": 108.0, "current": "23.6°C, Mây rải rác", "rain": 2.9, "rain_day": "21/10", "tmax": 31.4, "tmax_day": "20/10", "gust": 37.4, "gust_day": "18/10", "days": [["2026-10-18", 1.9, 30.7, 37.4], ["2026-10-19", 1.0, 30.7, 31.0], ["2026-10-20", 1.1, 31.4, 23.0], ["2026-10-21", 2.9, 30.3, 29.5]], "type": "Không có cảnh báo", "level": "Bình thường", "color": "green", "note": "Mưa lớn nhất: 2.9 mm (21/10); Nóng nhất: 31.4°C (20/10); Giật mạnh nhất: 37.4 km/h (18/10)."}, {"name": "Gia Nghĩa", "province": "Lâm Đồng", "lat": 11.9897, "lon": 107.6964, "current": "22.4°C, Nhiều mây", "rain": 16.4, "rain_day": "19/10", "tmax": 29.7, "tmax_day": "21/10", "gust": 36.4, "gust_day": "20/10", "days": [["2026-10-18", 9.1, 29.1, 30.2], ["2026-10-19", 16.4, 28.6, 26.3], ["2026-10-20", 9.4, 29.1, 36.4], ["2026-10-21", 5.3, 29.7, 27.7]], "type": "Mưa dông, cục bộ mưa to", "level": "Mưa dông, cục bộ mưa to", "color": "yellow", "note": "Mưa lớn nhất: 16.4 mm (19/10); Nóng nhất: 29.7°C (21/10); Giật mạnh nhất: 36.4 km/h (20/10)."}, {"name": "TP. Hồ Chí Minh", "province": "TP. Hồ Chí Minh", "lat": 10.8231, "lon": 106.6297, "current": "26.2°C, Nhiều mây", "rain": 12.0, "rain_day": "21/10", "tmax": 31.6, "tmax_day": "21/10", "gust": 40.7, "gust_day": "19/10", "days": [["2026-10-18", 10.6, 29.8, 31.7], ["2026-10-19", 10.5, 30.8, 40.7], ["2026-10-20", 10.1, 31.0, 33.1], ["2026-10-21", 12.0, 31.6, 24.5]], "type": "Mưa rất to", "level": "Mưa rất to", "color": "red", "note": "Mưa lớn nhất: 12.0 mm (21/10); Nóng nhất: 31.6°C (21/10); Giật mạnh nhất: 40.7 km/h (19/10)."}, {"name": "Biên Hòa", "province": "Đồng Nai", "lat": 10.9574, "lon": 106.8427, "current": "26.3°C, Nhiều mây", "rain": 14.4, "rain_day": "19/10", "tmax": 31.4, "tmax_day": "21/10", "gust": 37.8, "gust_day": "19/10", "days": [["2026-10-18", 8.8, 30.1, 33.5], ["2026-10-19", 14.4, 31.1, 37.8], ["2026-10-20", 12.7, 30.6, 30.2], ["2026-10-21", 7.5, 31.4, 24.8]], "type": "Mưa lớn", "level": "Mưa lớn", "color": "orange", "note": "Mưa lớn nhất: 14.4 mm (19/10); Nóng nhất: 31.4°C (21/10); Giật mạnh nhất: 37.8 km/h (19/10)."}, {"name": "Tây Ninh", "province": "Tây Ninh", "lat": 11.3353, "lon": 106.1099, "current": "24.9°C, Nhiều mây", "rain": 16.6, "rain_day": "21/10", "tmax": 31.4, "tmax_day": "18/10", "gust": 35.6, "gust_day": "18/10", "days": [["2026-10-18", 15.3, 31.4, 35.6], ["2026-10-19", 10.4, 31.3, 30.2], ["2026-10-20", 14.4, 30.9, 28.1], ["2026-10-21", 16.6, 30.9, 19.8]], "type": "Mưa lớn", "level": "Mưa lớn", "color": "orange", "note": "Mưa lớn nhất: 16.6 mm (21/10); Nóng nhất: 31.4°C (18/10); Giật mạnh nhất: 35.6 km/h (18/10)."}, {"name": "Cao Lãnh", "province": "Đồng Tháp", "lat": 10.4694, "lon": 105.6325, "current": "25.2°C, Nhiều mây", "rain": 27.9, "rain_day": "21/10", "tmax": 32.4, "tmax_day": "21/10", "gust": 32.8, "gust_day": "18/10", "days": [["2026-10-18", 12.2, 30.2, 32.8], ["2026-10-19", 13.3, 31.6, 29.9], ["2026-10-20", 23.1, 31.9, 28.4], ["2026-10-21", 27.9, 32.4, 26.3]], "type": "Mưa lớn", "level": "Mưa lớn", "color": "orange", "note": "Mưa lớn nhất: 27.9 mm (21/10); Nóng nhất: 32.4°C (21/10); Giật mạnh nhất: 32.8 km/h (18/10)."}, {"name": "Long Xuyên", "province": "An Giang", "lat": 10.3871, "lon": 105.4356, "current": "25.2°C, Nhiều mây", "rain": 30.9, "rain_day": "20/10", "tmax": 32.4, "tmax_day": "21/10", "gust": 33.8, "gust_day": "18/10", "days": [["2026-10-18", 7.4, 30.4, 33.8], ["2026-10-19", 18.6, 32.3, 31.7], ["2026-10-20", 30.9, 32.1, 33.1], ["2026-10-21", 14.6, 32.4, 22.7]], "type": "Mưa lớn", "level": "Mưa lớn", "color": "orange", "note": "Mưa lớn nhất: 30.9 mm (20/10); Nóng nhất: 32.4°C (21/10); Giật mạnh nhất: 33.8 km/h (18/10)."}, {"name": "Rạch Giá", "province": "An Giang", "lat": 10.0125, "lon": 105.08, "current": "25.0°C, Nhiều mây", "rain": 18.7, "rain_day": "19/10", "tmax": 32.7, "tmax_day": "21/10", "gust": 36.4, "gust_day": "20/10", "days": [["2026-10-18", 10.4, 32.2, 29.2], ["2026-10-19", 18.7, 31.8, 34.6], ["2026-10-20", 13.5, 32.2, 36.4], ["2026-10-21", 13.7, 32.7, 35.3]], "type": "Mưa lớn", "level": "Mưa lớn", "color": "orange", "note": "Mưa lớn nhất: 18.7 mm (19/10); Nóng nhất: 32.7°C (21/10); Giật mạnh nhất: 36.4 km/h (20/10)."}, {"name": "Vĩnh Long", "province": "Vĩnh Long", "lat": 10.2536, "lon": 105.9725, "current": "25.2°C, Nhiều mây", "rain": 21.1, "rain_day": "18/10", "tmax": 31.3, "tmax_day": "21/10", "gust": 38.9, "gust_day": "19/10", "days": [["2026-10-18", 21.1, 29.2, 31.0], ["2026-10-19", 9.6, 30.5, 38.9], ["2026-10-20", 7.7, 30.3, 28.8], ["2026-10-21", 11.8, 31.3, 30.2]], "type": "Mưa lớn", "level": "Mưa lớn", "color": "orange", "note": "Mưa lớn nhất: 21.1 mm (18/10); Nóng nhất: 31.3°C (21/10); Giật mạnh nhất: 38.9 km/h (19/10)."}, {"name": "Cần Thơ", "province": "Cần Thơ", "lat": 10.0452, "lon": 105.7469, "current": "25.1°C, Nhiều mây", "rain": 21.5, "rain_day": "21/10", "tmax": 31.9, "tmax_day": "21/10", "gust": 33.8, "gust_day": "20/10", "days": [["2026-10-18", 14.1, 29.0, 29.9], ["2026-10-19", 10.6, 29.8, 33.1], ["2026-10-20", 15.3, 31.3, 33.8], ["2026-10-21", 21.5, 31.9, 25.6]], "type": "Mưa lớn", "level": "Mưa lớn", "color": "orange", "note": "Mưa lớn nhất: 21.5 mm (21/10); Nóng nhất: 31.9°C (21/10); Giật mạnh nhất: 33.8 km/h (20/10)."}, {"name": "Cà Mau", "province": "Cà Mau", "lat": 9.1768, "lon": 105.1524, "current": "25.4°C, Nhiều mây", "rain": 20.2, "rain_day": "20/10", "tmax": 32.4, "tmax_day": "21/10", "gust": 31.3, "gust_day": "18/10", "days": [["2026-10-18", 15.5, 28.6, 31.3], ["2026-10-19", 17.1, 29.1, 25.9], ["2026-10-20", 20.2, 30.5, 29.5], ["2026-10-21", 10.3, 32.4, 28.1]], "type": "Mưa lớn", "level": "Mưa lớn", "color": "orange", "note": "Mưa lớn nhất: 20.2 mm (20/10); Nóng nhất: 32.4°C (21/10); Giật mạnh nhất: 31.3 km/h (18/10)."}], "zones": [{"id": "Z1", "name": "Nam Bộ — Mưa lớn", "lat": 10.0452, "lon": 105.7469, "radius_km": 130, "level": "Mưa lớn", "color": "orange", "date": "18/10/2026", "content": "Chiều và tối 18/10: mưa rào và dông rải rác, cục bộ có nơi mưa to. Trong mưa dông có lốc, sét và gió giật mạnh. Đề phòng ngập úng vùng trũng thấp, khu đô thị, ven sông/kênh rạch.", "source": "NCHMF qua vietnam.vn / Báo Lao Động", "link": "https://www.vietnam.vn/du-bao-thoi-tiet-dem-nay-va-ngay-mai-18-10-2026-bac-bo-ngay-nang-nam-bo-co-noi-mua-to"}, {"id": "Z2", "name": "Duyên hải Nam Trung Bộ (phía Nam) + Lâm Đồng — Mưa dông, cục bộ mưa to", "lat": 12.2, "lon": 108.5, "radius_km": 140, "level": "Mưa dông, cục bộ mưa to", "color": "yellow", "date": "18/10/2026", "content": "Chiều và tối 18/10: phía Nam duyên hải Nam Trung Bộ và Lâm Đồng có mưa rào và dông rải rác, cục bộ có nơi mưa to. Trong mưa dông có lốc, sét và gió giật mạnh.", "source": "NCHMF qua vietnam.vn / Báo Lao Động", "link": "https://www.vietnam.vn/du-bao-thoi-tiet-dem-nay-va-ngay-mai-18-10-2026-bac-bo-ngay-nang-nam-bo-co-noi-mua-to"}, {"id": "Z3", "name": "TP. Hồ Chí Minh — Mưa rất to", "lat": 10.8231, "lon": 106.6297, "radius_km": 35, "level": "Mưa rất to", "color": "red", "date": "18–20/10/2026", "content": "Tổng lượng mưa đợt 17–20/10: 100–200 mm, có nơi trên 250 mm (phần còn lại 18–20/10 vẫn trong đợt mưa này). Đề phòng ngập úng vùng trũng thấp, khu đô thị, công nghiệp, ven sông/kênh rạch. Trong mưa dông có lốc, sét, mưa đá, gió giật mạnh.", "source": "NCHMF + Đài KTTV Nam Bộ qua Znews", "link": "https://lifestyle.zingnews.vn/du-bao-tphcm-mua-lon-4-ngay-co-noi-tren-250-mm-post1690202.html"}, {"id": "Z4", "name": "Đông Bắc Bộ + Thanh Hóa → Huế — Theo dõi 21–22/10", "lat": 19.0, "lon": 106.0, "radius_km": 220, "level": "Theo dõi (chưa phải cảnh báo)", "color": "watch", "date": "21–22/10/2026 (dự báo trước)", "content": "Không khí lạnh lệch đông khoảng 19–21/10, dự kiến gây mưa rào và dông rải rác, cục bộ có nơi mưa to đến rất to ngày 21–22/10 tại Đông Bắc Bộ và Thanh Hóa đến Huế. Đây là dự báo trước — theo dõi bản tin tiếp theo của NCHMF.", "source": "NCHMF qua Soha / Eva", "link": "https://soha.vn/nhieu-noi-sap-co-mua-to-den-rat-to-trong-2-ngay-lien-tiep-198261017183502882.htm"}]};
+const SHEET_ID = '1uamUScKkAVhplJbqePU4OycBUTbxgmImN8LEVh-rznY';
+const GVIZ_JSON = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?tqx=out:json;headers:0';
+const COLORS = {red:'#ef4444', orange:'#f97316', yellow:'#eab308', green:'#22c55e', watch:'#38bdf8'};
+if (typeof L === 'undefined') {
+  document.getElementById('mapStatus').textContent = '❌ Không tải được thư viện bản đồ. Hãy mở file bằng trình duyệt Chrome/Safari (không mở trong khung xem trước của ứng dụng chat).';
+  throw new Error('Leaflet failed to load');
+}
+const map = L.map('map', {zoomControl: false}).setView([16.2, 107.8], 6);
+L.control.zoom({position: 'topright'}).addTo(map);
+setTimeout(() => map.invalidateSize(), 300);
+window.addEventListener('resize', () => map.invalidateSize());
+const gHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {maxZoom: 20, attribution: 'Google'});
+const gRoad = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {maxZoom: 20, attribution: 'Google'});
+const esri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom: 19, attribution: 'Esri'});
+const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: 'OpenStreetMap'});
+gHybrid.addTo(map);
+document.getElementById('mapStatus').textContent = '✅ Bản đồ đã sẵn sàng.';
+document.getElementById('mapStatus').style.color = '#4ade80';
+// --- Quản lý nền bản đồ: Google (mặc định) -> Esri -> OSM ---
+const BASES = {
+  google: {layer: gHybrid, label: 'Google'},
+  esri:   {layer: esri,   label: 'Esri'},
+  osm:    {layer: osm,    label: 'OpenStreetMap'}
+};
+const BASE_ORDER = ['google', 'esri', 'osm'];
+let activeBase = 'google';
+let tilesLoaded = 0, baseTimer = null, baseTried = ['google'];
+function setBase(name, auto){
+  const target = BASES[name]; if (!target) return;
+  Object.values(BASES).forEach(b => { if (map.hasLayer(b.layer)) map.removeLayer(b.layer); });
+  map.addLayer(target.layer);
+  activeBase = name;
+  tilesLoaded = 0;
+  tileErr = 0; clearTimeout(errTimer);
+  document.getElementById('baseName').textContent = target.label + (auto ? ' (tự đổi)' : '');
+  document.getElementById('tileState').textContent = 'đang tải ảnh nền…';
+  clearTimeout(baseTimer);
+  baseTimer = setTimeout(() => {
+    if (tilesLoaded > 0) { document.getElementById('tileState').textContent = 'ảnh nền đã tải ✓'; return; }
+    const next = BASE_ORDER.find(n => !baseTried.includes(n));
+    if (next) {
+      baseTried.push(next);
+      document.getElementById('tileState').textContent = 'nguồn này bị chặn, đang đổi…';
+      setBase(next, true);
+    } else {
+      document.getElementById('tileState').textContent = '❌ Trình xem này chặn tải ảnh nền từ mọi nguồn. Hãy tải file về và mở bằng Chrome/Safari để thấy nền Google Maps.';
+      document.getElementById('blockedBanner').style.display = 'block';
+    }
+  }, 6000);
+}
+let tileErr = 0, errTimer = null;
+function tryNextBase(){
+  const next = BASE_ORDER.find(n => !baseTried.includes(n));
+  if (next) {
+    baseTried.push(next);
+    document.getElementById('tileState').textContent = 'nguồn này bị chặn, đang đổi…';
+    setBase(next, true);
+  }
+}
+Object.values(BASES).forEach(b => {
+  b.layer.on('tileload', () => {
+    tilesLoaded++;
+    if (tilesLoaded === 1) document.getElementById('tileState').textContent = 'ảnh nền đã tải ✓';
+  });
+  b.layer.on('tileerror', () => {
+    if (tilesLoaded > 0 || b.layer !== BASES[activeBase].layer) return;
+    if (++tileErr >= 3) {
+      clearTimeout(errTimer);
+      errTimer = setTimeout(() => { if (tilesLoaded === 0) tryNextBase(); }, 800);
+    }
+  });
+});
+document.querySelectorAll('[data-base]').forEach(btn => {
+  btn.onclick = () => { baseTried = [btn.dataset.base]; setBase(btn.dataset.base, false); };
+});
+setBase('google', false);
+L.control.layers({'Google Vệ tinh': gHybrid, 'Google Đường': gRoad, 'Esri Vệ tinh': esri, 'OpenStreetMap': osm}).addTo(map);
+
+function esc(s){return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function colorForLevel(level){
+  const lv = String(level || '');
+  if (lv === 'Mưa rất to') return 'red';
+  if (lv.includes('Theo dõi')) return 'watch';
+  if (lv.includes('rất to')) return 'orange'; // "Mưa lớn, cục bộ rất to"
+  if (lv.includes('Mưa lớn') || lv.includes('gay gắt') || lv.includes('Giật mạnh') || lv.includes('Gió giật mạnh')) return 'orange';
+  if (lv.includes('Mưa') || lv.includes('Nắng nóng') || lv.includes('Gió') || lv.includes('dông') || lv.includes('Dông')) return 'yellow';
+  return 'green';
+}
+
+// ---------- Vẽ dữ liệu (dùng cho cả dữ liệu nhúng sẵn và dữ liệu tươi) ----------
+let zoneObjs = [], pointObjs = [];
+let tourIdx = 0, tourTimer = null, tourPlaying = false;
+let curFilter = 'all';
+const tourPos = document.getElementById('tourPos');
+const btnTour = document.getElementById('btnTour');
+const zoneList = document.getElementById('zoneList');
+const pointList = document.getElementById('pointList');
+
+function clearData(){
+  zoneObjs.forEach(z => map.removeLayer(z.circle));
+  pointObjs.forEach(p => map.removeLayer(p.marker));
+  zoneObjs = []; pointObjs = [];
+}
+
+function pointPopup(p){
+  return `<div class="pop"><span class="badge" style="background:${COLORS[p.color]}">${esc(p.level)}</span>
+    <h4>${esc(p.name)} — ${esc(p.province)}</h4>
+    <table>
+    <tr><td>Trạng thái</td><td>${esc(p.type)}</td></tr>
+    <tr><td>Mưa lớn nhất</td><td><b>${p.rain} mm</b> (${esc(p.rain_day)})</td></tr>
+    <tr><td>Nóng nhất</td><td><b>${p.tmax}°C</b> (${esc(p.tmax_day)})</td></tr>
+    <tr><td>Gió giật mạnh nhất</td><td><b>${p.gust} km/h</b> (${esc(p.gust_day)})</td></tr>
+    <tr><td>Hiện tại</td><td>${esc(p.current)}</td></tr>
+    <tr><td>Tọa độ</td><td>${p.lat}, ${p.lon} (đại diện)</td></tr>
+    </table><div class="src">${esc(p.note)}<br>Nguồn: Open-Meteo (mô hình) + NCHMF</div></div>`;
+}
+
+function buildFromData(data){
+  stopTour();
+  clearData();
+  tourIdx = 0;
+  tourPos.textContent = 'Vùng 1/' + data.zones.length;
+  document.title = 'Cảnh báo thời tiết cực đoan Việt Nam — ' + (data.window || '');
+  const apptitle = document.querySelector('.apptitle');
+  if (apptitle) apptitle.textContent = '🌧️ Cảnh báo thời tiết · ' + (data.window || '');
+  document.querySelectorAll('#drawer h3').forEach(h => {
+    if (h.textContent.includes('Vùng cảnh báo')) h.textContent = '📍 Vùng cảnh báo NCHMF (' + data.zones.length + ')';
+    if (h.textContent.includes('Điểm dự báo')) h.textContent = '📌 Điểm dự báo (' + data.points.length + ')';
+  });
+  data.zones.forEach((z, i) => {
+    const c = L.circle([z.lat, z.lon], {radius: (z.radius_km || 100) * 1000, color: COLORS[z.color] || '#eab308',
+      weight: 2, dashArray: '8 6', fillColor: COLORS[z.color] || '#eab308', fillOpacity: 0.12}).addTo(map);
+    c.bindPopup(`<div class="pop"><span class="badge" style="background:${COLORS[z.color]||'#eab308'}">${esc(z.level)}</span>
+      <h4>${esc(z.name)}</h4>
+      <table><tr><td>Thời gian</td><td>${esc(z.date)}</td></tr>
+      <tr><td>Nội dung</td><td>${esc(z.content)}</td></tr></table>
+      <div class="src">Nguồn: ${esc(z.source)}<br><a href="${esc(z.link)}" target="_blank" rel="noopener">Mở bản tin gốc</a></div></div>`, {maxWidth: 340});
+    zoneObjs.push({circle: c, data: z, index: i});
+  });
+  data.points.forEach((p, i) => {
+    const m = L.circleMarker([p.lat, p.lon], {radius: 6, color: '#fff', weight: 1.5,
+      fillColor: COLORS[p.color], fillOpacity: 0.95}).addTo(map);
+    m.bindPopup(pointPopup(p), {maxWidth: 340});
+    pointObjs.push({marker: m, data: p, index: i});
+  });
+  renderZoneList();
+  renderPoints();
+}
+
+function renderZoneList(){
+  zoneList.innerHTML = '';
+  zoneObjs.forEach((zo, i) => {
+    const z = zo.data;
+    const d = document.createElement('div');
+    d.className = 'item';
+    d.innerHTML = `<span class="dot" style="background:${COLORS[z.color]||'#eab308'}"></span><b>${esc(z.name)}</b><br><small>${esc(z.level)} · ${esc(z.date)}</small>`;
+    d.onclick = () => { stopTour(); document.getElementById('drawer').classList.remove('open'); goToZone(i); };
+    zoneList.appendChild(d);
+  });
+}
+
+function renderPoints(){
+  pointList.innerHTML = '';
+  pointObjs.forEach((po, i) => {
+    const p = po.data;
+    const warned = p.color !== 'green';
+    if (curFilter === 'warn' && !warned) return;
+    if (curFilter === 'normal' && warned) return;
+    const d = document.createElement('div');
+    d.className = 'item';
+    d.innerHTML = `<span class="dot" style="background:${COLORS[p.color]}"></span><b>${esc(p.name)}</b> <small>(${esc(p.province)})</small><br><small>Mưa max ${p.rain} mm · Tmax ${p.tmax}°C · Giật ${p.gust} km/h · ${esc(p.level)}</small>`;
+    d.onclick = () => { stopTour(); document.getElementById('drawer').classList.remove('open'); map.flyTo([p.lat, p.lon], 10, {duration: 1.6}); setTimeout(() => pointObjs[i].marker.openPopup(), 1700); };
+    pointList.appendChild(d);
+  });
+}
+document.getElementById('filters').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  curFilter = b.dataset.f;
+  document.querySelectorAll('#filters .btn').forEach(x => x.classList.toggle('on', x === b));
+  renderPoints();
+});
+
+function toggleDrawer(){ document.getElementById('drawer').classList.toggle('open'); }
+
+// Hoạt cảnh
+function zoomForRadius(km){ if (km <= 50) return 11; if (km <= 140) return 8; return 7; }
+function goToZone(i){
+  if (!zoneObjs.length) return;
+  tourIdx = (i + zoneObjs.length) % zoneObjs.length;
+  tourPos.textContent = 'Vùng ' + (tourIdx + 1) + '/' + zoneObjs.length;
+  const z = zoneObjs[tourIdx].data;
+  map.flyTo([z.lat, z.lon], zoomForRadius(z.radius_km || 100), {duration: 2.2});
+  setTimeout(() => { zoneObjs[tourIdx].circle.openPopup(); }, 2300);
+  if (tourPlaying){
+    clearTimeout(tourTimer);
+    tourTimer = setTimeout(() => goToZone(tourIdx + 1), 8000);
+  }
+}
+function stopTour(){
+  tourPlaying = false; clearTimeout(tourTimer);
+  btnTour.textContent = '▶';
+}
+btnTour.onclick = () => {
+  if (tourPlaying){ stopTour(); return; }
+  tourPlaying = true; btnTour.textContent = '⏸';
+  goToZone(tourIdx);
+};
+document.getElementById('btnNext').onclick = () => { stopTour(); goToZone(tourIdx + 1); };
+document.getElementById('btnPrev').onclick = () => { stopTour(); goToZone(tourIdx - 1); };
+
+// ---------- Đọc dữ liệu tươi từ Google Sheet (JSONP qua thẻ <script>) ----------
+// fetch() bị chặn khi mở file dạng content:// / file:// (Chrome Android mở file
+// tải về), vì Google không gửi CORS cho gviz. Thẻ <script> không bị chặn bởi
+// CORS nên dùng cơ chế JSONP của gviz: tqx=out:json;responseHandler:<tên hàm>.
+// gviz trả về <tên hàm>({table:{cols, rows}}) — rows chỉ chứa dòng dữ liệu,
+// ghi chú "Cập nhật lúc..." nằm trong cols[0].label.
+function cellVal(row, i){
+  const c = row && row.c ? row.c[i] : null;
+  return (c && c.v != null) ? c.v : '';
+}
+function num(v, def){
+  const n = parseFloat(String(v).replace(',', '.'));
+  return isNaN(n) ? def : n;
+}
+function parseNoteDays(note){
+  const out = {rain_day: '', tmax_day: '', gust_day: ''};
+  const m1 = /Mưa lớn nhất:[^()]*\(([^)]+)\)/.exec(note || '');
+  const m2 = /Nóng nhất:[^()]*\(([^)]+)\)/.exec(note || '');
+  const m3 = /Giật mạnh nhất:[^()]*\(([^)]+)\)/.exec(note || '');
+  if (m1) out.rain_day = m1[1];
+  if (m2) out.tmax_day = m2[1];
+  if (m3) out.gust_day = m3[1];
+  return out;
+}
+function setLiveBadge(ok, updated){
+  const b = document.getElementById('liveBadge');
+  if (!b) return;
+  if (ok){ b.textContent = '● Trực tiếp từ Sheet · ' + updated; b.style.background = '#14532d'; b.style.borderColor = '#22c55e'; }
+  else { b.textContent = '● Dữ liệu nhúng sẵn · ' + updated; b.style.background = '#431407'; b.style.borderColor = '#f97316'; }
+}
+let livePointsResp = null, liveZonesResp = null, liveTimer = null;
+function injectLiveScript(url){
+  const s = document.createElement('script');
+  s.src = url;
+  s.onerror = () => { s.remove(); };
+  s.onload = () => s.remove();
+  document.head.appendChild(s);
+}
+window.onPointsLive = (resp) => { livePointsResp = resp; maybeFinishLive(); };
+window.onZonesLive = (resp) => { liveZonesResp = resp; maybeFinishLive(); };
+function maybeFinishLive(){
+  if (!livePointsResp || !liveZonesResp) return;
+  clearTimeout(liveTimer);
+  try {
+    if (livePointsResp.status !== 'ok' || liveZonesResp.status !== 'ok') throw new Error('Sheet trả về lỗi');
+    const pRows = (livePointsResp.table.rows || []).filter(r => {
+      const nm = String(cellVal(r, 1) || '');
+      return nm && nm !== 'Khu vực / Địa danh';
+    });
+    const zRows = (liveZonesResp.table.rows || []).filter(r => {
+      const nm = String(cellVal(r, 1) || '');
+      return nm && nm !== 'Vùng cảnh báo';
+    });
+    if (!pRows.length) throw new Error('Không đọc được điểm nào từ Sheet');
+    const label0 = (livePointsResp.table.cols && livePointsResp.table.cols[0] && livePointsResp.table.cols[0].label) || '';
+    const mUp = /Cập nhật lúc:\s*(.+?\(giờ Hà Nội\))/.exec(label0);
+    const updated = mUp ? mUp[1] : '';
+    const firstWin = String(cellVal(pRows[0], 0)).split('(')[0].trim();
+    const points = pRows.map(row => {
+      const level = String(cellVal(row, 6) || 'Bình thường');
+      const note = String(cellVal(row, 13) || '');
+      const nd = parseNoteDays(note);
+      return {
+        name: String(cellVal(row, 1)), province: String(cellVal(row, 2)),
+        lat: num(cellVal(row, 3), 0), lon: num(cellVal(row, 4), 0),
+        current: String(cellVal(row, 10)), rain: num(cellVal(row, 7), 0), rain_day: nd.rain_day,
+        tmax: num(cellVal(row, 8), 0), tmax_day: nd.tmax_day,
+        gust: num(cellVal(row, 9), 0), gust_day: nd.gust_day,
+        days: [], type: String(cellVal(row, 5) || level), level: level, color: colorForLevel(level),
+        note: note
+      };
+    });
+    const zones = zRows.map((row, idx) => {
+      const level = String(cellVal(row, 6) || '');
+      return {
+        id: 'Z' + (idx + 1), name: String(cellVal(row, 1)),
+        lat: num(cellVal(row, 3), 0), lon: num(cellVal(row, 4), 0),
+        radius_km: num(cellVal(row, 11), 100), level: level, color: colorForLevel(level),
+        date: String(cellVal(row, 0)), content: String(cellVal(row, 7)),
+        source: String(cellVal(row, 8)), link: String(cellVal(row, 9))
+      };
+    });
+    buildFromData({window: firstWin, points, zones});
+    setLiveBadge(true, updated || firstWin);
+    document.getElementById('mapStatus').textContent = '✅ Đang hiển thị dữ liệu trực tiếp từ Google Sheet (cập nhật lúc ' + (updated || firstWin) + ').';
+  } catch (err){
+    setLiveBadge(false, EMBEDDED.updated || '');
+    document.getElementById('mapStatus').textContent = '⚠️ Không đọc được Sheet trực tiếp (' + err.message + ') — đang hiển thị dữ liệu nhúng sẵn (cập nhật lúc ' + (EMBEDDED.updated || '') + ').';
+  }
+}
+function loadLiveData(){
+  livePointsResp = null; liveZonesResp = null;
+  injectLiveScript(GVIZ_JSON + ';responseHandler:onPointsLive&sheet=' + encodeURIComponent('Diem_DuBao'));
+  injectLiveScript(GVIZ_JSON + ';responseHandler:onZonesLive&sheet=' + encodeURIComponent('CanhBao_NCHMF'));
+  clearTimeout(liveTimer);
+  liveTimer = setTimeout(() => {
+    if (!livePointsResp || !liveZonesResp){
+      setLiveBadge(false, EMBEDDED.updated || '');
+      document.getElementById('mapStatus').textContent = '⚠️ Không đọc được Sheet trực tiếp (quá thời gian chờ) — đang hiển thị dữ liệu nhúng sẵn (cập nhật lúc ' + (EMBEDDED.updated || '') + ').';
+    }
+  }, 12000);
+}
+
+// Vẽ ngay bằng dữ liệu nhúng sẵn, rồi thử đọc dữ liệu tươi từ Sheet.
+buildFromData(EMBEDDED);
+setLiveBadge(false, EMBEDDED.updated || '');
+loadLiveData();
+
+// Tải file bản đồ về máy: xuất bản SẠCH (không kèm trạng thái đang chạy của bản đồ,
+// vì DOM Leaflet trong #map mà mang theo sang file tải xuống sẽ làm bản đồ lỗi khi mở lại).
+function downloadClean(){
+  const clone = document.documentElement.cloneNode(true);
+  const cMap = clone.querySelector('#map');
+  if (cMap) { cMap.innerHTML = ''; cMap.className = ''; cMap.removeAttribute('style'); }
+  clone.querySelectorAll('.leaflet-popup, .leaflet-control-container').forEach(el => el.remove());
+  const dr = clone.querySelector('#drawer');
+  if (dr) dr.classList.remove('open');
+  const st = clone.querySelector('#mapStatus');
+  if (st) { st.textContent = '⏳ Đang tải bản đồ…'; st.style.color = ''; }
+  const bt = clone.querySelector('#btnTour');
+  if (bt) bt.textContent = '▶';
+  const tp = clone.querySelector('#tourPos');
+  if (tp) tp.textContent = 'Vùng 1/' + zoneObjs.length;
+  const bn = clone.querySelector('#baseName');
+  if (bn) bn.textContent = 'Google';
+  const ts = clone.querySelector('#tileState');
+  if (ts) ts.textContent = 'đang tải ảnh nền…';
+  const bb = clone.querySelector('#blockedBanner');
+  if (bb) bb.style.display = 'none';
+  clone.querySelectorAll('#filters .btn').forEach(x => x.classList.toggle('on', x.dataset.f === 'all'));
+  const blob = new Blob(['<!DOCTYPE html>\n' + clone.outerHTML], {type: 'text/html;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'BanDo_CanhBao_ThoiTiet.html';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+</script>
+</body>
+</html>
