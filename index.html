@@ -414,6 +414,7 @@ function loadLiveData(){
   livePointsResp = null; liveZonesResp = null;
   injectLiveScript(GVIZ_JSON + ';responseHandler:onPointsLive&sheet=' + encodeURIComponent('Diem_DuBao'));
   injectLiveScript(GVIZ_JSON + ';responseHandler:onZonesLive&sheet=' + encodeURIComponent('CanhBao_NCHMF'));
+  injectLiveScript(GVIZ_JSON + ';responseHandler:onAudioLive&sheet=' + encodeURIComponent('AmThanh_TomTat'));
   clearTimeout(liveTimer);
   liveTimer = setTimeout(() => {
     if (!livePointsResp || !liveZonesResp){
@@ -425,56 +426,53 @@ function loadLiveData(){
 
 // ---------- Audio tóm tắt buổi sáng (MP3 giọng Khải trên Drive) ----------
 // Lịch 7h tạo MP3 mỗi sáng, tải lên Drive (chia sẻ công khai) và ghi File ID
-// vào tab AmThanh_TomTat của Sheet. Nút "Nghe tóm tắt" lấy File ID mới nhất
-// qua JSONP rồi phát trực tiếp từ Drive.
-let briefAudio = null;
-function fetchBriefFileId(){
-  return new Promise((resolve) => {
-    const to = setTimeout(() => resolve(null), 10000);
-    window.onAudioLive = (resp) => {
-      clearTimeout(to);
-      try {
-        if (!resp || resp.status !== 'ok') return resolve(null);
-        const rows = (resp.table.rows || []).filter(r => {
-          const fid = String(cellVal(r, 2) || '');
-          return fid && fid !== 'File ID (Drive)';
-        });
-        if (!rows.length) return resolve(null);
-        resolve(String(cellVal(rows[rows.length - 1], 2)));
-      } catch (e){ resolve(null); }
-    };
-    injectLiveScript(GVIZ_JSON + ';responseHandler:onAudioLive&sheet=' + encodeURIComponent('AmThanh_TomTat'));
-  });
-}
-async function playBrief(){
+// vào tab AmThanh_TomTat của Sheet. File ID được tải NGAY khi mở trang (cùng
+// đợt với dữ liệu điểm/vùng) để khi bấm nút là phát được luôn trong cùng
+// thao tác chạm của người dùng (trình duyệt di động chặn play() sau await).
+let briefFileId = null, briefAudio = null;
+window.onAudioLive = (resp) => {
+  try {
+    if (!resp || resp.status !== 'ok') return;
+    const rows = (resp.table.rows || []).filter(r => {
+      const fid = String(cellVal(r, 2) || '');
+      return fid && fid !== 'File ID (Drive)';
+    });
+    if (rows.length) briefFileId = String(cellVal(rows[rows.length - 1], 2));
+  } catch (e){}
+};
+function playBrief(){
   const btn = document.getElementById('btnAudio');
   if (briefAudio && !briefAudio.paused){
     briefAudio.pause();
     btn.textContent = '🔊 Nghe tóm tắt';
     return;
   }
-  btn.disabled = true;
-  btn.textContent = '⏳ Đang tải…';
-  const fid = await fetchBriefFileId();
-  btn.disabled = false;
-  if (!fid){
-    btn.textContent = '🔊 Nghe tóm tắt';
-    alert('Chưa có bản audio tóm tắt. Bản audio được tạo mỗi sáng lúc 7h.');
+  if (!briefFileId){
+    alert('Chưa có bản audio tóm tắt. Bản audio được tạo mỗi sáng lúc 7h — bạn thử lại sau.');
     return;
   }
   if (!briefAudio){
     briefAudio = new Audio();
+    briefAudio.preload = 'auto';
     briefAudio.onended = () => { btn.textContent = '🔊 Nghe tóm tắt'; };
-    briefAudio.onerror = () => { btn.textContent = '🔊 Nghe tóm tắt'; alert('Không phát được audio. Kiểm tra mạng và thử lại.'); };
+    briefAudio.onerror = () => {
+      btn.textContent = '🔊 Nghe tóm tắt';
+      console.log('Audio lỗi:', briefAudio.error && briefAudio.error.code);
+      alert('Không tải được file audio. Kiểm tra mạng rồi bấm lại.');
+    };
   }
-  briefAudio.src = 'https://drive.google.com/uc?export=download&id=' + fid;
-  try {
-    await briefAudio.play();
-    btn.textContent = '⏸ Dừng';
-  } catch (e){
-    btn.textContent = '🔊 Nghe tóm tắt';
-    alert('Không phát được audio. Kiểm tra mạng và thử lại.');
+  if (!briefAudio.src){
+    briefAudio.src = 'https://drive.google.com/uc?export=download&id=' + briefFileId;
   }
+  const pr = briefAudio.play();
+  if (pr && typeof pr.catch === 'function'){
+    pr.catch((e) => {
+      btn.textContent = '🔊 Nghe tóm tắt';
+      console.log('play() bị chặn:', e && e.name);
+      alert('Trình duyệt chặn phát audio. Bạn bấm lại nút một lần nữa.');
+    });
+  }
+  btn.textContent = '⏸ Dừng';
 }
 
 // Vẽ ngay bằng dữ liệu nhúng sẵn, rồi thử đọc dữ liệu tươi từ Sheet.
