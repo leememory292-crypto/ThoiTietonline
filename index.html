@@ -461,8 +461,12 @@ function playBrief(){
       alert('Không tải được file audio. Kiểm tra mạng rồi bấm lại.');
     };
   }
+  // Link trực tiếp tới máy chủ file của Drive (drive.usercontent.google.com):
+  // link drive.google.com/uc bị 403 khi trình duyệt gửi Range/Origin (thẻ
+  // <audio> luôn gửi Range) nên điện thoại không tải được — link usercontent
+  // trả 206 Partial Content + CORS *, phát được bình thường.
   if (!briefAudio.src){
-    briefAudio.src = 'https://drive.google.com/uc?export=download&id=' + briefFileId;
+    briefAudio.src = 'https://drive.usercontent.google.com/download?id=' + briefFileId + '&export=download';
   }
   const pr = briefAudio.play();
   if (pr && typeof pr.catch === 'function'){
