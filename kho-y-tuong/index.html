@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>💡 Kho ý tưởng viết Facebook</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+         background: #f2f4f8; color: #1c1e21; padding-bottom: 40px; }
+  header { background: linear-gradient(135deg, #6a5cff, #8b5cf6); color: #fff;
+           padding: 18px 16px 14px; position: sticky; top: 0; z-index: 10;
+           box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+  header h1 { font-size: 19px; }
+  header p { font-size: 12.5px; opacity: .9; margin-top: 3px; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 12px 12px 0; }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 10px; }
+  #q { flex: 1; padding: 10px 12px; border: 1px solid #ccd0d5; border-radius: 10px;
+       font-size: 15px; background: #fff; }
+  #btnDone { padding: 10px 12px; border: 1px solid #ccd0d5; border-radius: 10px;
+             background: #fff; font-size: 13.5px; white-space: nowrap; }
+  #btnDone.on { background: #e7f3ff; border-color: #6a5cff; color: #4a3fd4; font-weight: 600; }
+  .chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 4px;
+           -webkit-overflow-scrolling: touch; }
+  .chip { flex-shrink: 0; padding: 7px 13px; border-radius: 20px; border: 1px solid #ccd0d5;
+          background: #fff; font-size: 13.5px; }
+  .chip.on { background: #6a5cff; color: #fff; border-color: #6a5cff; font-weight: 600; }
+  .card { background: #fff; border-radius: 14px; padding: 14px 15px; margin-bottom: 12px;
+          box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .card.done { opacity: .55; }
+  .meta { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .topic { background: #ede9fe; color: #5b21b6; font-size: 12px; font-weight: 700;
+           padding: 3px 10px; border-radius: 12px; }
+  .score { font-size: 12px; color: #b45309; font-weight: 700; }
+  .src { font-size: 12px; color: #65676b; margin-left: auto; }
+  .title { font-size: 16.5px; font-weight: 700; line-height: 1.4; margin-bottom: 7px; }
+  .sapo { font-size: 14px; color: #4b4f56; line-height: 1.5; margin-bottom: 10px; }
+  .detail { display: none; background: #f8f7ff; border-radius: 10px; padding: 10px 12px;
+            margin-bottom: 10px; font-size: 13.5px; line-height: 1.65; white-space: pre-line; }
+  .detail.show { display: block; }
+  .detail b { color: #5b21b6; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { padding: 8px 13px; border-radius: 9px; border: 1px solid #ccd0d5; background: #fff;
+         font-size: 13.5px; }
+  .btn.primary { background: #6a5cff; color: #fff; border-color: #6a5cff; font-weight: 600; }
+  .btn.done-btn.done { background: #dcfce7; border-color: #16a34a; color: #15803d; }
+  .empty { text-align: center; color: #65676b; padding: 40px 20px; font-size: 14.5px; line-height: 1.7; }
+  .foot { text-align: center; font-size: 12px; color: #90949c; margin-top: 18px; line-height: 1.6; }
+  #status { text-align: center; font-size: 12.5px; color: #65676b; margin: 6px 0 10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>💡 Kho ý tưởng viết Facebook</h1>
+  <p id="subtitle">Đang tải ý tưởng mới nhất…</p>
+</header>
+<div class="wrap">
+  <div class="toolbar">
+    <input id="q" type="search" placeholder="🔍 Tìm theo tiêu đề, chủ đề…">
+    <button id="btnDone" class="btn">✓ Đã viết</button>
+  </div>
+  <div class="chips" id="chips"></div>
+  <div id="status"></div>
+  <div id="list"></div>
+  <div class="foot">Ý tưởng do Apps Script quét RSS mỗi sáng 5h–6h, lọc bằng từ khóa (không cần AI).<br>
+  Nút "Đã viết" chỉ lưu trên máy này.</div>
+</div>
+
+<script>
+// ID Sheet "Kho ý tưởng viết Facebook"
+const SHEET_ID = '1apJ-leFMMBLqLeyMJjWVCyQyDYJVIRJqiOToZpD7rWA';
+const GVIZ = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?tqx=out:json;headers:0';
+
+let IDEAS = [];        // [{ngay,nguon,tieuDe,sapo,link,chuDe,diem,goc,hoi,trangThai}]
+let curTopic = '', showDone = false, curQ = '';
+const doneSet = new Set(JSON.parse(localStorage.getItem('kyt_done') || '[]'));
+
+function cellVal(r, i) {
+  const c = r.c && r.c[i];
+  return c ? (c.v !== undefined && c.v !== null ? String(c.v) : '') : '';
+}
+function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function loadLive() {
+  const s = document.createElement('script');
+  const cb = 'onIdeasLive';
+  window[cb] = function (resp) {
+    try {
+      if (!resp || resp.status !== 'ok') throw 0;
+      const rows = (resp.table.rows || []).filter(r => cellVal(r, 0) !== 'Ngày');
+      IDEAS = rows.map(r => ({
+        ngay: cellVal(r, 0), nguon: cellVal(r, 1), tieuDe: cellVal(r, 2),
+        sapo: cellVal(r, 3), link: cellVal(r, 4), chuDe: cellVal(r, 5) || 'Khác',
+        diem: parseInt(cellVal(r, 6) || '0', 10),
+        goc: cellVal(r, 7), hoi: cellVal(r, 8), trangThai: cellVal(r, 9)
+      })).filter(x => x.tieuDe);
+      // mới nhất + điểm cao lên đầu
+      IDEAS.sort((a, b) => (b.diem - a.diem));
+      render(true);
+    } catch (e) { render(false); }
+  };
+  s.onerror = () => render(false);
+  s.src = GVIZ + ';responseHandler:' + cb + '&sheet=' + encodeURIComponent('YTuong');
+  document.head.appendChild(s);
+  setTimeout(() => { if (!IDEAS.length) render(false); }, 12000);
+}
+
+function render(ok) {
+  const st = document.getElementById('status');
+  const list = document.getElementById('list');
+  if (!ok && !IDEAS.length) {
+    st.textContent = '⚠️ Không tải được dữ liệu Sheet — kiểm tra mạng rồi tải lại trang.';
+    list.innerHTML = '';
+    document.getElementById('subtitle').textContent = 'Chưa tải được dữ liệu';
+    return;
+  }
+  st.textContent = 'Có ' + IDEAS.length + ' ý tưởng trong kho · cập nhật mỗi sáng';
+  document.getElementById('subtitle').textContent =
+    'Có ' + IDEAS.length + ' ý tưởng · quét tự động mỗi sáng';
+
+  // chips chủ đề
+  const topics = [...new Set(IDEAS.map(x => x.chuDe))];
+  const chips = document.getElementById('chips');
+  chips.innerHTML = '<button class="chip' + (curTopic === '' ? ' on' : '') +
+    '" data-t="">🌐 Tất cả</button>' + topics.map(t =>
+    '<button class="chip' + (curTopic === t ? ' on' : '') + '" data-t="' + esc(t) + '">' +
+    esc(t) + '</button>').join('');
+  chips.querySelectorAll('.chip').forEach(c =>
+    c.onclick = () => { curTopic = c.dataset.t; render(true); });
+
+  const q = curQ.toLowerCase();
+  const items = IDEAS.filter(x => {
+    if (!showDone && doneSet.has(x.link)) return false;
+    if (curTopic && x.chuDe !== curTopic) return false;
+    if (q && (x.tieuDe + ' ' + x.sapo + ' ' + x.chuDe).toLowerCase().indexOf(q) === -1) return false;
+    return true;
+  });
+
+  if (!items.length) {
+    list.innerHTML = '<div class="empty">Không có ý tưởng nào khớp.<br>Thử đổi từ khóa hoặc chủ đề khác.</div>';
+    return;
+  }
+  list.innerHTML = items.map((x, i) => {
+    const done = doneSet.has(x.link);
+    return '<div class="card' + (done ? ' done' : '') + '" data-i="' + IDEAS.indexOf(x) + '">' +
+      '<div class="meta"><span class="topic">' + esc(x.chuDe) + '</span>' +
+      '<span class="score">★ ' + x.diem + '</span>' +
+      '<span class="src">' + esc(x.nguon) + ' · ' + esc(x.ngay) + '</span></div>' +
+      '<div class="title">' + esc(x.tieuDe) + '</div>' +
+      '<div class="sapo">' + esc(x.sapo) + '</div>' +
+      '<div class="detail" id="d' + i + '"><b>✍️ Góc viết gợi ý</b>\n' + esc(x.goc) +
+      '\n\n<b>❓ Câu hỏi gợi mở</b>\n' + esc(x.hoi) + '</div>' +
+      '<div class="actions">' +
+      '<button class="btn primary" data-act="detail" data-i="' + i + '">👁 Gợi ý viết</button>' +
+      '<button class="btn" data-act="copy" data-i="' + i + '">📋 Sao chép</button>' +
+      '<button class="btn" data-act="open" data-i="' + i + '">🔗 Bài gốc</button>' +
+      '<button class="btn done-btn' + (done ? ' done' : '') + '" data-act="done" data-i="' + i + '">' +
+      (done ? '✓ Đã viết' : '✓ Đánh dấu đã viết') + '</button>' +
+      '</div></div>';
+  }).join('');
+
+  list.querySelectorAll('button').forEach(b => {
+    const i = parseInt(b.dataset.i, 10);
+    const x = items[i];
+    const act = b.dataset.act;
+    if (act === 'detail') b.onclick = () =>
+      document.getElementById('d' + i).classList.toggle('show');
+    else if (act === 'open') b.onclick = () => window.open(x.link, '_blank');
+    else if (act === 'copy') b.onclick = () => copyIdea(x, b);
+    else if (act === 'done') b.onclick = () => {
+      if (doneSet.has(x.link)) doneSet.delete(x.link); else doneSet.add(x.link);
+      localStorage.setItem('kyt_done', JSON.stringify([...doneSet]));
+      render(true);
+    };
+  });
+}
+
+function copyIdea(x, btn) {
+  const text = '💡 Ý TƯỞNG: ' + x.tieuDe + '\n🔗 ' + x.link +
+    '\n\n✍️ GÓC VIẾT GỢI Ý:\n' + x.goc + '\n\n❓ CÂU HỎI GỢI MỞ:\n' + x.hoi;
+  const ok = () => { btn.textContent = '✓ Đã chép!'; setTimeout(() => btn.textContent = '📋 Sao chép', 1500); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(ok).catch(() => fallbackCopy(text, ok));
+  } else fallbackCopy(text, ok);
+}
+function fallbackCopy(text, ok) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); ok(); } catch (e) {}
+  document.body.removeChild(ta);
+}
+
+document.getElementById('q').addEventListener('input', e => { curQ = e.target.value; render(true); });
+document.getElementById('btnDone').onclick = e => {
+  showDone = !showDone;
+  e.target.classList.toggle('on', showDone);
+  render(true);
+};
+
+loadLive();
+</script>
+</body>
+</html>
