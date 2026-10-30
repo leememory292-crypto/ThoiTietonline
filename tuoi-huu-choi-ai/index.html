@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Tuổi Hưu Chơi AI — Học AI cùng nhau</title>
+<meta name="description" content="Cộng đồng học AI cho người hưu trí: học từ đầu, chậm rãi, có người đồng hành. Cuộn để xem câu chuyện.">
+<style>
+  html, body { margin: 0; padding: 0; background: #0b0b0e; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script>
+/*
+ * scroll-studio scrub engine (vanilla JS, no framework, no paid API)
+ *
+ * Usage:
+ *   <div id="stage"></div>
+ *   <script src="scrub-engine.js"></script>
+ *   <script>
+ *     ScrollStudio.mount(document.getElementById('stage'), SCROLL_CONFIG);
+ *   </script>
+ *
+ * SCROLL_CONFIG = {
+ *   video: 'film.mp4',            // main film (desktop)
+ *   videoMobile: 'film-m.mp4',    // optional native 9:16 chain
+ *   poster: 'poster.jpg',
+ *   mobileBreakpoint: 768,        // px — below this, use videoMobile if present
+ *   vhPerScene: 160,              // scroll length per scene, in vh
+ *   introVh: 100,                 // intro hero scroll length, in vh
+ *   outroVh: 80,                  // outro/CTA scroll length, in vh
+ *   sections: [                   // one per scene, in film order
+ *     { eyebrow, headline, body, pills: [], align: 'left'|'center'|'right' },
+ *     ...
+ *   ],
+ *   intro:  { eyebrow, headline, body },
+ *   outro:  { headline, body, ctaText, ctaHref },
+ *   lerp: 0.12,                   // scrub smoothing (lower = floatier)
+ * }
+ *
+ * Mechanics: total scrollable progress 0..1 maps to video duration 0..1.
+ * A rAF loop eases video.currentTime toward the scroll target. Copy panels
+ * fade/slide per active section. prefers-reduced-motion -> static poster.
+ */
+(function (global) {
+  'use strict';
+
+  var CSS = [
+    '.ss-root{position:relative;background:#0b0b0e;color:#fff;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;overflow:clip}',
+    '.ss-sticky{position:sticky;top:0;height:100vh;height:100svh;overflow:hidden}',
+    '.ss-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#0b0b0e}',
+    '.ss-shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.28) 0%,rgba(0,0,0,0) 30%,rgba(0,0,0,0) 62%,rgba(0,0,0,.5) 100%);pointer-events:none}',
+    '.ss-copy{position:absolute;inset:0;display:flex;align-items:center;pointer-events:none;padding:0 max(6vw,env(safe-area-inset-right)) 0 max(6vw,env(safe-area-inset-left));padding-bottom:env(safe-area-inset-bottom)}',
+    '.ss-copy.right{justify-content:flex-end;text-align:right}',
+    '.ss-copy.center{justify-content:center;text-align:center}',
+    '.ss-panel{max-width:min(34rem,86vw);opacity:0;transform:translateY(26px);transition:opacity .55s ease,transform .55s ease}',
+    '.ss-panel.on{opacity:1;transform:none}',
+    '.ss-eyebrow{display:inline-block;font-size:.78rem;letter-spacing:.22em;text-transform:uppercase;opacity:.85;margin-bottom:.9rem;border:1px solid rgba(255,255,255,.35);padding:.35rem .8rem;border-radius:999px;backdrop-filter:blur(6px)}',
+    '.ss-head{font-size:clamp(2rem,4.6vw,3.6rem);line-height:1.08;margin:0 0 1rem;font-weight:750;text-wrap:balance;text-shadow:0 2px 24px rgba(0,0,0,.45)}',
+    '.ss-body{font-size:clamp(1rem,1.6vw,1.2rem);line-height:1.65;opacity:.92;margin:0 0 1.2rem;text-shadow:0 1px 12px rgba(0,0,0,.5)}',
+    '.ss-pills{display:flex;gap:.5rem;flex-wrap:wrap}',
+    '.ss-pill{font-size:.82rem;padding:.4rem .9rem;border-radius:999px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.25);backdrop-filter:blur(6px)}',
+    '.ss-cta{display:inline-block;margin-top:1.2rem;padding:.9rem 2rem;border-radius:999px;background:#fff;color:#111;font-weight:700;text-decoration:none;pointer-events:auto}',
+    '.ss-progress{position:absolute;left:0;top:0;height:3px;width:100%;transform-origin:0 50%;background:#fff;opacity:.85;z-index:5}',
+    '.ss-hint{position:absolute;left:50%;bottom:calc(26px + env(safe-area-inset-bottom));transform:translateX(-50%);font-size:.8rem;letter-spacing:.28em;text-transform:uppercase;opacity:.75;animation:ss-bob 2.2s ease-in-out infinite;z-index:5;white-space:nowrap}',
+    '@keyframes ss-bob{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,10px)}}',
+    '.ss-spacer{position:relative}',
+    '@media (prefers-reduced-motion:reduce){.ss-panel{transition:none}.ss-hint{animation:none}}'
+  ].join('\n');
+
+  function el(tag, cls, html) {
+    var d = document.createElement(tag);
+    if (cls) d.className = cls;
+    if (html != null) d.innerHTML = html;
+    return d;
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function isMobile(cfg) {
+    return !!(cfg.videoMobile && window.innerWidth < (cfg.mobileBreakpoint || 768));
+  }
+
+  function mount(container, cfg) {
+    cfg = cfg || {};
+    var sections = cfg.sections || [];
+    var vhPerScene = cfg.vhPerScene || 160;
+    var introVh = cfg.introVh || 100;
+    var outroVh = cfg.outroVh || 80;
+
+    var style = document.createElement('style');
+    style.textContent = CSS;
+    document.head.appendChild(style);
+
+    var root = el('div', 'ss-root');
+    var sticky = el('div', 'ss-sticky');
+    var video = el('video', 'ss-video');
+    video.muted = true; video.playsInline = true; video.preload = 'auto';
+    video.setAttribute('playsinline', ''); video.setAttribute('muted', '');
+    if (cfg.poster) video.poster = cfg.poster;
+    var shade = el('div', 'ss-shade');
+    var copyWrap = el('div', 'ss-copy');
+    var progress = el('div', 'ss-progress');
+    var hint = el('div', 'ss-hint', 'Cu\u1ed9n xu\u1ed1ng \u2193');
+
+    sticky.appendChild(video); sticky.appendChild(shade);
+    sticky.appendChild(copyWrap); sticky.appendChild(progress); sticky.appendChild(hint);
+    root.appendChild(sticky);
+
+    function spacer(vh) {
+      var s = el('div', 'ss-spacer');
+      s.style.height = vh + 'vh';
+      root.appendChild(s);
+    }
+    spacer(introVh);
+    for (var i = 0; i < sections.length; i++) spacer(vhPerScene);
+    spacer(outroVh);
+    container.appendChild(root);
+
+    var panels = [];
+    function panel(data, align, isOutro) {
+      var p = el('div', 'ss-panel');
+      var html = '';
+      if (data.eyebrow) html += '<span class="ss-eyebrow">' + esc(data.eyebrow) + '</span>';
+      if (data.headline) html += '<h2 class="ss-head">' + esc(data.headline) + '</h2>';
+      if (data.body) html += '<p class="ss-body">' + esc(data.body) + '</p>';
+      if (data.pills && data.pills.length) {
+        html += '<div class="ss-pills">' + data.pills.map(function (t) {
+          return '<span class="ss-pill">' + esc(t) + '</span>';
+        }).join('') + '</div>';
+      }
+      if (isOutro && data.ctaText) {
+        html += '<a class="ss-cta" href="' + esc(data.ctaHref || '#') + '">' + esc(data.ctaText) + '</a>';
+      }
+      p.innerHTML = html;
+      copyWrap.appendChild(p);
+      panels.push({ node: p, align: align || 'left' });
+    }
+    if (cfg.intro) panel(cfg.intro, 'center', false);
+    sections.forEach(function (s) { panel(s, s.align || 'left', false); });
+    if (cfg.outro) panel(cfg.outro, 'center', true);
+
+    var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var src = isMobile(cfg) ? cfg.videoMobile : cfg.video;
+
+    function setSrc(url, done) {
+      if (reduced || !url) { done(url); return; }
+      try {
+        fetch(url).then(function (r) {
+          if (!r.ok) throw new Error('fetch ' + r.status);
+          return r.blob();
+        }).then(function (b) {
+          done(URL.createObjectURL(b));
+        }).catch(function () { done(url); });
+      } catch (e) { done(url); }
+    }
+
+    var duration = 0, target = 0, current = 0, ready = false, activeIdx = -1;
+    var lerp = cfg.lerp || 0.12;
+
+    function scrollProgress() {
+      var max = root.scrollHeight - window.innerHeight;
+      if (max <= 0) return 0;
+      var y = Math.min(Math.max(window.scrollY - root.offsetTop, 0), max);
+      return y / max;
+    }
+
+    function setActive(idx) {
+      if (idx === activeIdx) return;
+      activeIdx = idx;
+      panels.forEach(function (p, j) {
+        p.node.classList.toggle('on', j === idx);
+      });
+      var a = panels[idx] ? panels[idx].align : 'left';
+      copyWrap.className = 'ss-copy' + (a === 'center' ? ' center' : a === 'right' ? ' right' : '');
+    }
+
+    function frame() {
+      var p = scrollProgress();
+      progress.style.transform = 'scaleX(' + p.toFixed(4) + ')';
+      hint.style.opacity = p < 0.02 ? '' : '0';
+
+      var segs = panels.length;
+      var idx = Math.min(segs - 1, Math.floor(p * segs));
+      setActive(idx);
+
+      if (ready && duration > 0 && !reduced) {
+        target = p * duration;
+        current += (target - current) * lerp;
+        if (Math.abs(target - current) < 0.033) { current = target; }
+        try {
+          if (Math.abs(video.currentTime - current) > 0.033) video.currentTime = current;
+        } catch (e) { /* seek while loading — ignore */ }
+      }
+      requestAnimationFrame(frame);
+    }
+
+    setSrc(src, function (finalSrc) {
+      if (!finalSrc) return;
+      video.src = finalSrc;
+      video.load();
+      video.addEventListener('loadedmetadata', function () {
+        duration = video.duration || 0;
+        ready = true;
+        video.pause();
+        if (reduced) { try { video.currentTime = Math.min(0.1, duration); } catch (e) {} }
+      });
+      video.addEventListener('error', function () { video.style.display = 'none'; });
+    });
+
+    var rT;
+    window.addEventListener('resize', function () {
+      clearTimeout(rT);
+      rT = setTimeout(function () {
+        var wantSrc = isMobile(cfg) ? cfg.videoMobile : cfg.video;
+        if (wantSrc && wantSrc !== src) location.reload();
+      }, 300);
+    });
+
+    requestAnimationFrame(frame);
+    return { root: root, video: video };
+  }
+
+  global.ScrollStudio = { mount: mount };
+})(window);
+
+</script>
+<script>
+/* ====== SỬA CONFIG NÀY CHO MỖI DỰ ÁN ====== */
+var SCROLL_CONFIG = {
+  video: 'https://muse.ai/files/1329642070235840/1153171303912382/ytu24babfjxq1xhvryaz3c68/film.mp4',
+  videoMobile: 'https://muse.ai/files/1329642070235840/2585853775230167/tesvfsayxlsprh71eqkcmb8g/film-m.mp4',
+  poster: 'https://muse.ai/files/1329642070235840/1745930606475282/l1lgkulcqz9dwvdv2krv0le5/poster.jpg',
+  mobileBreakpoint: 768,
+  vhPerScene: 160,
+  introVh: 100,
+  outroVh: 80,
+  lerp: 0.12,
+
+  intro: {
+    eyebrow: 'Cộng đồng học AI cho người hưu trí',
+    headline: 'Tuổi Hưu Chơi AI',
+    body: 'Nơi người hưu trí học công nghệ từ đầu, chậm rãi, có người đồng hành. Cuộn xuống để xem câu chuyện.'
+  },
+
+  sections: [
+    {
+      eyebrow: 'Học cùng nhau',
+      headline: 'Học AI không khó, học cùng nhau càng vui',
+      body: 'Ở đây không ai bị bỏ lại phía sau: bài hướng dẫn từng bước nhỏ, hỏi là có người giúp.',
+      pills: ['Học từ đầu', 'Hỏi là có người giúp', 'Mỗi ngày một chút'],
+      align: 'left'
+    },
+    {
+      eyebrow: 'Cách tham gia',
+      headline: 'Bắt đầu chỉ với ba bước nhỏ',
+      body: 'Không cần biết gì trước, không cần máy xịn — chỉ cần một chiếc điện thoại và một chút tò mò.',
+      pills: ['Vào nhóm', 'Xem bài đầu tiên', 'Hỏi khi cần'],
+      align: 'right'
+    }
+  ],
+
+  outro: {
+    headline: 'Bắt đầu hôm nay, cùng nhau học AI',
+    body: 'Vào nhóm, xem bài hướng dẫn đầu tiên, hỏi bất cứ điều gì chưa rõ — luôn có người trả lời.',
+    ctaText: 'Tham gia cộng đồng',
+    ctaHref: '#'
+  }
+};
+/* ====== HẾT PHẦN CẦN SỬA ====== */
+
+ScrollStudio.mount(document.getElementById('stage'), SCROLL_CONFIG);
+</script>
+</body>
+</html>
