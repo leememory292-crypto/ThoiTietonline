@@ -148,18 +148,7 @@
     var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var src = isMobile(cfg) ? cfg.videoMobile : cfg.video;
 
-    function setSrc(url, done) {
-      if (reduced || !url) { done(url); return; }
-      try {
-        fetch(url).then(function (r) {
-          if (!r.ok) throw new Error('fetch ' + r.status);
-          return r.blob();
-        }).then(function (b) {
-          done(URL.createObjectURL(b));
-        }).catch(function () { done(url); });
-      } catch (e) { done(url); }
-    }
-
+    function setSrc(url, done) { done(url); }
     var duration = 0, target = 0, current = 0, ready = false, activeIdx = -1;
     var lerp = cfg.lerp || 0.12;
 
